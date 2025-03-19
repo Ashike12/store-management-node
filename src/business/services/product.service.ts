@@ -113,6 +113,7 @@ export class ProductService {
       responseCompanies.push({
         ItemId: x._id,
         ProductName: x.ProductName,
+        Description: x.Description,
         MakingPrice: x.MakingPrice,
         SellingPrice: x.SellingPrice,
         Quantity: x.Quantity
