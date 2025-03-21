@@ -6,7 +6,10 @@ import { RootSchema } from './root.schema';
 })
 export class Invoice extends RootSchema {
   @Prop()
-  WholesalerId: string;
+  WholeSalerId: string;
+
+  @Prop()
+  InvoiceNumber: string;
 
   @Prop()
   TotalAmount: number;

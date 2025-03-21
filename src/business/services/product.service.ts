@@ -141,6 +141,7 @@ export class ProductService {
     let TotalSellAmount = 0;
     let TotalCostAmount = 0;
     const invoiceId = this.sharedService.getUid();
+    const invoiceNumber = (wholesalerInfo.FirstName[0] ?? "X") + (wholesalerInfo.LastName[0] ?? "Y") + new Date().getTime();
     for (const eachSell of productSellData) {
       const productInfo = await this.productModel.findOne({ _id: eachSell.ProductId });
       const currentProductSellAMount = eachSell.SellingPrice * eachSell.Quantity;
@@ -151,7 +152,6 @@ export class ProductService {
         ProductId: eachSell.ProductId,
         SellingPrice: eachSell.SellingPrice,
         Quantity: eachSell.Quantity,
-        SellingDate: eachSell.SellingDate,
         WholeSalerId: dto.WholeSalerId,
         InvoiceId: invoiceId,
         CreatedDate: new Date().toISOString()
@@ -168,6 +168,7 @@ export class ProductService {
       PaymentAmount: dto.PaymentAmount,
       ProfitMargin: dto.PaymentAmount - TotalCostAmount,
       WholeSalerId: dto.WholeSalerId,
+      InvoiceNumber: invoiceNumber,
       CreatedDate: new Date().toISOString()
     }
     await this.productSellModel.insertMany(sellModels);
@@ -190,14 +191,20 @@ export class ProductService {
     const dataCount = await this.invoiceModel
       .countDocuments(mongoQuery);
 
+    const wholeSalerIds = datas.map(x => x.WholeSalerId);
+    const wholeSalerInfos = await this.userModel.find({ _id: { $in: wholeSalerIds } });
+
     const responseCompanies = [];
     datas.forEach(x => {
+      const wholeSalerInfo = wholeSalerInfos.find(y => y._id == x.WholeSalerId);
       responseCompanies.push({
         ItemId: x._id,
+        InvoiceNumber: x.InvoiceNumber,
         PaymentAmount: x.PaymentAmount,
         ProfitMargin: x.ProfitMargin,
         TotalAmount: x.TotalAmount,
-        WholesalerId: x.WholesalerId,
+        WholeSalerId: x.WholeSalerId,
+        WholeSalerName: wholeSalerInfo.DisplayName,
         CreatedDate: x.CreatedDate
       });
     });

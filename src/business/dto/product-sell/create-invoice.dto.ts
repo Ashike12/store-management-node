@@ -21,7 +21,4 @@ export class ProductSellDto {
 
   @IsNotEmpty()
   readonly Quantity: number;
-
-  @IsNotEmpty()
-  readonly SellingDate: Date;
 }
