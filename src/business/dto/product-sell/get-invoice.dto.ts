@@ -4,8 +4,9 @@ import {
   IsString,
 } from 'class-validator';
 
-export class DeleteCompanyDataDto {
+export class GetInvoiceDto {
   @IsNotEmpty()
   @IsString()
   readonly ItemId: string;
 }
+

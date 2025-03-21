@@ -6,6 +6,9 @@ export class RootSchema extends Document {
     _id: string;
 
     @Prop()
+    CreatedDate: string;
+
+    @Prop()
     RolesAllowedToRead?: string[];
 
     @Prop()

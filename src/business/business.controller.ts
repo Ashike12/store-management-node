@@ -9,6 +9,7 @@ import { CreateProductDto } from './dto/product/create-product.dto';
 import { UpdateProductDto } from './dto/product/update-product.dto';
 import { DeleteProductDto } from './dto/product/delete-product.dto';
 import { CreateInvoiceDto } from './dto/product-sell/create-invoice.dto';
+import { GetInvoiceDto } from './dto/product-sell/get-invoice.dto';
 
 @Controller('business')
 export class BusinessController {
@@ -50,5 +51,20 @@ export class BusinessController {
   @UseGuards(AuthGuard())
   CreateInvoice(@Body() dto: CreateInvoiceDto): Promise<CommandResponse> {
     return this.productService.createInvoice(dto);
+  }
+
+  @Post('GetInvoice')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  GetInvoice(@Query() query: ExpressQuery,
+  @Body() dto: GetInvoiceDto): Promise<QueryRespone> {
+    return this.productService.getInvoice(query, dto);
+  }
+
+  @Post('DeleteInvoice')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  DeleteInvoice(@Body() dto: DeleteProductDto): Promise<CommandResponse> {
+    return this.productService.deleteInvoiceById(dto.ItemId);
   }
 }

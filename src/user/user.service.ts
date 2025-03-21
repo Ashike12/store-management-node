@@ -55,7 +55,8 @@ export class UserService {
         Phone: x.Phone || null,
         DateOfBirth: x.DateOfBirth || null,
         Address: x.Address,
-        Active: x.Active
+        Active: x.Active,
+        CreatedDate: x.CreatedDate
       });
     });
 
@@ -128,7 +129,8 @@ export class UserService {
       Roles: [UserRoles.AppUser, UserRoles.Annonymous, UserRoles.WholeSaler],
       RolesAllowedToRead: [UserRoles.Admin],
       RolesAllowedToUpdate: [UserRoles.Admin],
-      RolesAllowedToWrite: [UserRoles.Admin]
+      RolesAllowedToWrite: [UserRoles.Admin],
+      CreatedDate: new Date().toISOString()
     }
     await this.userModel.create(userModel);
     await this.redisClient.setWithExpiryInSecond(userModel.ActivationId, userModel._id, this.invitationExpiryDurationInDays * 24 * 60 * 60);

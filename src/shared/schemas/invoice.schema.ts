@@ -17,9 +17,6 @@ export class Invoice extends RootSchema {
   @Prop()
   ProfitMargin: number;
 
-  @Prop()
-  WholeSalerId: string;
-
 }
 
 export const InvoiceSchema = SchemaFactory.createForClass(Invoice);

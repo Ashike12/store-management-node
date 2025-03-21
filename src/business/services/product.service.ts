@@ -18,6 +18,7 @@ import { CreateInvoiceDto, ProductSellDto } from '../dto/product-sell/create-inv
 import { ProductSell } from 'src/shared/schemas/productSell.schema';
 import { Invoice } from 'src/shared/schemas/invoice.schema';
 import { User } from 'src/shared/schemas/user.schema';
+import { GetInvoiceDto } from '../dto/product-sell/get-invoice.dto';
 
 @Injectable()
 export class ProductService {
@@ -50,7 +51,8 @@ export class ProductService {
       Description: dto.Description,
       RolesAllowedToRead: [UserRoles.Admin],
       RolesAllowedToUpdate: [UserRoles.Admin],
-      RolesAllowedToWrite: [UserRoles.Admin]
+      RolesAllowedToWrite: [UserRoles.Admin],
+      CreatedDate: new Date().toISOString()
     }
     await this.productModel.create(dataModel);
     return response;
@@ -116,7 +118,8 @@ export class ProductService {
         Description: x.Description,
         MakingPrice: x.MakingPrice,
         SellingPrice: x.SellingPrice,
-        Quantity: x.Quantity
+        Quantity: x.Quantity,
+        CreatedDate: x.CreatedDate
       });
     });
     response.setData(responseCompanies, dataCount);
@@ -150,7 +153,8 @@ export class ProductService {
         Quantity: eachSell.Quantity,
         SellingDate: eachSell.SellingDate,
         WholeSalerId: dto.WholeSalerId,
-        InvoiceId: invoiceId
+        InvoiceId: invoiceId,
+        CreatedDate: new Date().toISOString()
       });
       const updateProductDto = {
         ItemId: eachSell.ProductId,
@@ -163,10 +167,52 @@ export class ProductService {
       TotalAmount: TotalSellAmount,
       PaymentAmount: dto.PaymentAmount,
       ProfitMargin: dto.PaymentAmount - TotalCostAmount,
-      WholeSalerId: dto.WholeSalerId
+      WholeSalerId: dto.WholeSalerId,
+      CreatedDate: new Date().toISOString()
     }
     await this.productSellModel.insertMany(sellModels);
     await this.invoiceModel.create(invoiceModel);
+    return response;
+  }
+
+  async getInvoice(query: Query, dto: GetInvoiceDto): Promise<QueryRespone> {
+    const response = new QueryRespone();
+    const resPerPage = Number(query.size) ?? 10000;
+    const currentPage = Number(query.page) || 1;
+    const skip = resPerPage * (currentPage - 1);
+    // console.log(userId);
+    let mongoQuery = dto.ItemId ? { _id: dto.ItemId } : {};
+
+    const datas = await this.invoiceModel
+      .find(mongoQuery)
+      .limit(resPerPage)
+      .skip(skip);
+    const dataCount = await this.invoiceModel
+      .countDocuments(mongoQuery);
+
+    const responseCompanies = [];
+    datas.forEach(x => {
+      responseCompanies.push({
+        ItemId: x._id,
+        PaymentAmount: x.PaymentAmount,
+        ProfitMargin: x.ProfitMargin,
+        TotalAmount: x.TotalAmount,
+        WholesalerId: x.WholesalerId,
+        CreatedDate: x.CreatedDate
+      });
+    });
+    response.setData(responseCompanies, dataCount);
+    return response;
+  }
+
+  async deleteInvoiceById(id: string): Promise<CommandResponse> {
+    const response = new CommandResponse();
+    const existingData = await this.invoiceModel.findOne({ _id: id });
+    if (!existingData) {
+      throw new BadRequestException('Data not found');
+    }
+
+    await this.invoiceModel.findByIdAndDelete(id);
     return response;
   }
 
