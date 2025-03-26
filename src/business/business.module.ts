@@ -8,6 +8,7 @@ import { ProductSchema } from 'src/shared/schemas/product.schema';
 import { ProductSellSchema } from 'src/shared/schemas/productSell.schema';
 import { InvoiceSchema } from 'src/shared/schemas/invoice.schema';
 import { ProductService } from './services/product.service';
+import { InvoiceService } from './services/invoice.service';
 
 @Module({
   imports: [
@@ -20,6 +21,6 @@ import { ProductService } from './services/product.service';
     ]),
   ],
   controllers: [BusinessController],
-  providers: [SharedService, ProductService],
+  providers: [SharedService, ProductService, InvoiceService],
 })
 export class BusinessModule {}

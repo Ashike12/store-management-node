@@ -9,6 +9,9 @@ export class Invoice extends RootSchema {
   WholeSalerId: string;
 
   @Prop()
+  WholeSalerName: string;
+
+  @Prop()
   InvoiceNumber: string;
 
   @Prop()

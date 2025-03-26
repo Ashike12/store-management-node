@@ -9,6 +9,9 @@ export class ProductSell extends RootSchema {
   ProductId: string;
 
   @Prop()
+  ProductName: string;
+
+  @Prop()
   SellingPrice: number;
 
   @Prop()
