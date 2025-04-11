@@ -37,9 +37,9 @@ export class InvoiceService {
 
   async createInvoice(dto: CreateInvoiceDto): Promise<CommandResponse> {
     // ToDo need validation so that sell quantity does not go above remaining product quantity
-    if (dto.ProductSellInfo.length == 0) {
-      throw new BadRequestException('No products added to sell');
-    }
+    // if (dto.ProductSellInfo.length == 0) {
+    //   throw new BadRequestException('No products added to sell');
+    // }
     const response = new CommandResponse();
     const wholesalerInfo = await this.userModel.findOne({ _id: dto.WholeSalerId });
     if (!wholesalerInfo) {
