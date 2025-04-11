@@ -7,5 +7,7 @@ import {
 export class GetInvoiceDto {
   @IsString()
   readonly ItemId: string;
+
+  readonly WholesalerId?: string = null;
 }
 

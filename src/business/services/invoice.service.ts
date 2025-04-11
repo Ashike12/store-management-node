@@ -17,6 +17,7 @@ import { Invoice } from 'src/shared/schemas/invoice.schema';
 import { User } from 'src/shared/schemas/user.schema';
 import { GetInvoiceDto } from '../dto/product-sell/get-invoice.dto';
 import { ProductService } from './product.service';
+import { ProductSellDto, UpdateInvoiceDto } from '../dto/product-sell/update-invoice.dto';
 
 @Injectable()
 export class InvoiceService {
@@ -95,7 +96,11 @@ export class InvoiceService {
     const currentPage = Number(query.page) || 1;
     const skip = resPerPage * (currentPage - 1);
     // console.log(userId);
-    let mongoQuery = dto.ItemId ? { _id: dto.ItemId } : {};
+    let mongoQuery: any = dto.ItemId ? { _id: dto.ItemId } : {};
+
+    if (!!dto.WholesalerId) {
+      mongoQuery = { WholeSalerId: dto.WholesalerId };
+    }
 
     const datas = await this.invoiceModel
       .find(mongoQuery)
@@ -117,7 +122,7 @@ export class InvoiceService {
         CreatedDate: x.CreatedDate
       });
     });
-    if(!!dto.ItemId) {
+    if (!!dto.ItemId) {
       return await this.getInvoiceByIdResponse(responseCompanies);
     }
     response.setData(responseCompanies, dataCount);
@@ -126,12 +131,12 @@ export class InvoiceService {
 
   private async getInvoiceByIdResponse(data: any[]): Promise<QueryRespone> {
     const response = new QueryRespone();
-    if(data.length !== 1) {
+    if (data.length !== 1) {
       throw new BadRequestException('Data not found or multiple data exists');
     }
     const invoiceDetails = data[0];
     invoiceDetails.ProductSellInfo = [];
-    const datas = await this.productSellModel.find({InvoiceId: invoiceDetails.ItemId});
+    const datas = await this.productSellModel.find({ InvoiceId: invoiceDetails.ItemId });
     datas.forEach(x => {
       invoiceDetails.ProductSellInfo.push({
         ItemId: x._id,
@@ -158,6 +163,81 @@ export class InvoiceService {
 
     await this.invoiceModel.findByIdAndDelete(id);
     return response;
+  }
+
+  async updateInvoice(dto: UpdateInvoiceDto): Promise<CommandResponse> {
+    const response = new CommandResponse();
+    const existingData = await this.invoiceModel.findOne({ _id: dto.ItemId });
+    if (!existingData) {
+      throw new BadRequestException('Invoice not found');
+    }
+    await this.restoreOldSells(dto.ItemId);
+    const sellModels = [];
+    let TotalSellAmount = 0;
+    let TotalCostAmount = 0;
+    for (const eachSell of dto.ProductSellInfo) {
+      const productInfo = await this.productModel.findOne({ _id: eachSell.ProductId });
+      const currentProductSellAMount = eachSell.SellingPrice * eachSell.Quantity;
+      TotalSellAmount += currentProductSellAMount;
+      TotalCostAmount += (productInfo.MakingPrice * eachSell.Quantity);
+      sellModels.push({
+        _id: this.sharedService.getUid(),
+        ProductId: eachSell.ProductId,
+        ProductName: productInfo.ProductName,
+        SellingPrice: eachSell.SellingPrice,
+        Quantity: eachSell.Quantity,
+        WholeSalerId: dto.WholeSalerId,
+        WholeSalerName: existingData.WholeSalerName,
+        InvoiceId: existingData._id,
+        IdsAllowedToRead: [dto.WholeSalerId],
+        CreatedDate: new Date().toISOString()
+      });
+      const updateProductDto = {
+        ItemId: eachSell.ProductId,
+        Quantity: productInfo.Quantity - eachSell.Quantity
+      } as UpdateProductDto;
+      await this.productService.updateProduct(updateProductDto);
+    }
+    if(sellModels.length > 0) {
+      await this.productSellModel.insertMany(sellModels);
+    }
+    await this.invoiceModel.findByIdAndUpdate(dto.ItemId, 
+      this.createInvoiceUpdateObject(dto.PaymentAmount,
+        dto.PaymentAmount - TotalCostAmount, TotalSellAmount), {
+      new: true,
+      runValidators: true,
+    });
+    
+    return response;
+  }
+
+  private async restoreOldSells(invoiceId: string) {
+    const sellProducts = await this.productSellModel.find({ InvoiceId: invoiceId });
+    await this.productSellModel.deleteMany({ InvoiceId: invoiceId });
+    for (const eachSell of sellProducts) {
+      const productInfo = await this.productModel.findOne({ _id: eachSell.ProductId });
+      const updateProductDto = {
+        ItemId: eachSell.ProductId,
+        Quantity: productInfo.Quantity + eachSell.Quantity // increase the old sell value
+      } as UpdateProductDto;
+      await this.productService.updateProduct(updateProductDto);
+    }
+  }
+
+  private createInvoiceUpdateObject(paymentAMount: any, profitMargin: any, totalAmount: any): any {
+    const updates = {};
+    if (totalAmount != null) updates['TotalAmount'] = totalAmount;
+    if (paymentAMount != null) updates['PaymentAmount'] = paymentAMount;
+    if (profitMargin != null) updates['ProfitMargin'] = profitMargin;
+    return updates;
+  }
+
+  private createProductSellUpdateObject(dto: ProductSellDto): any {
+    const updates = {};
+    if (dto.ProductId != null) updates['ProductId'] = dto.ProductId;
+    if (dto.Quantity != null) updates['TotalAmount'] = dto.Quantity;
+    if (dto.SellingPrice != null) updates['SellingPrice'] = dto.SellingPrice;
+    return updates;
   }
 
 }
