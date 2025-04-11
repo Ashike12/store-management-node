@@ -83,8 +83,7 @@ export class BusinessController {
   @Post('GetDashboardData')
   @HttpCode(200)
   @UseGuards(AuthGuard())
-  GetDashboardData(@Query() query: ExpressQuery,
-  @Body() dto: GetInvoiceDto): Promise<QueryRespone> {
-    return this.invoiceService.getInvoiceList(query, dto);
+  GetDashboardData(): Promise<QueryRespone> {
+    return this.invoiceService.getDashboardStatsData();
   }
 }

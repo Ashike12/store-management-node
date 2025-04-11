@@ -236,10 +236,11 @@ export class InvoiceService {
     return updates;
   }
 
-  private async getDashboardStatsData(): Promise<QueryRespone> {
+  public async getDashboardStatsData(): Promise<QueryRespone> {
     const response = new QueryRespone();
     const wholeSalers = await this.userModel.find({ Roles: UserRoles.WholeSaler });
     const invoices = await this.invoiceModel.find({});
+    const sellsInfo = await this.productSellModel.find({});
 
     return response;
   }
