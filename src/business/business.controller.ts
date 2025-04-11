@@ -79,4 +79,12 @@ export class BusinessController {
   DeleteInvoice(@Body() dto: DeleteProductDto): Promise<CommandResponse> {
     return this.invoiceService.deleteInvoiceById(dto.ItemId);
   }
+
+  @Post('GetDashboardData')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  GetDashboardData(@Query() query: ExpressQuery,
+  @Body() dto: GetInvoiceDto): Promise<QueryRespone> {
+    return this.invoiceService.getInvoiceList(query, dto);
+  }
 }

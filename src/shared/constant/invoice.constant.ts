@@ -1,0 +1,4 @@
+export const INVOICE_CONSTANT = {
+    WHOLESALE: 'WHOLESALE',
+    CONSUMER: 'CONSUMER',
+}

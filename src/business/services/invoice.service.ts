@@ -18,6 +18,8 @@ import { User } from 'src/shared/schemas/user.schema';
 import { GetInvoiceDto } from '../dto/product-sell/get-invoice.dto';
 import { ProductService } from './product.service';
 import { ProductSellDto, UpdateInvoiceDto } from '../dto/product-sell/update-invoice.dto';
+import { UserRoles } from 'src/shared/constant/roles.constant';
+import { INVOICE_CONSTANT } from 'src/shared/constant/invoice.constant';
 
 @Injectable()
 export class InvoiceService {
@@ -41,8 +43,8 @@ export class InvoiceService {
     //   throw new BadRequestException('No products added to sell');
     // }
     const response = new CommandResponse();
-    const wholesalerInfo = await this.userModel.findOne({ _id: dto.WholeSalerId });
-    if (!wholesalerInfo) {
+    let wholesalerInfo = await this.userModel.findOne({ _id: dto.WholeSalerId });
+    if (dto.InvoiceType == INVOICE_CONSTANT.WHOLESALE && !wholesalerInfo) {
       throw new BadRequestException('Wholesaler not found');
     }
     const productSellData = dto.ProductSellInfo || [];
@@ -50,7 +52,7 @@ export class InvoiceService {
     let TotalSellAmount = 0;
     let TotalCostAmount = 0;
     const invoiceId = this.sharedService.getUid();
-    const invoiceNumber = (wholesalerInfo.FirstName[0] ?? "X") + (wholesalerInfo.LastName[0] ?? "Y") + new Date().getTime();
+    const invoiceNumber = ((wholesalerInfo && wholesalerInfo.FirstName[0]) ?? "X") + ((wholesalerInfo && wholesalerInfo.LastName[0]) ?? "Y") + new Date().getTime();
     for (const eachSell of productSellData) {
       const productInfo = await this.productModel.findOne({ _id: eachSell.ProductId });
       const currentProductSellAMount = eachSell.SellingPrice * eachSell.Quantity;
@@ -63,7 +65,7 @@ export class InvoiceService {
         SellingPrice: eachSell.SellingPrice,
         Quantity: eachSell.Quantity,
         WholeSalerId: dto.WholeSalerId,
-        WholeSalerName: wholesalerInfo.DisplayName,
+        WholeSalerName: (wholesalerInfo && wholesalerInfo?.DisplayName) ?? '',
         InvoiceId: invoiceId,
         IdsAllowedToRead: [dto.WholeSalerId],
         CreatedDate: new Date().toISOString()
@@ -80,7 +82,8 @@ export class InvoiceService {
       PaymentAmount: dto.PaymentAmount,
       ProfitMargin: dto.PaymentAmount - TotalCostAmount,
       WholeSalerId: dto.WholeSalerId,
-      WholeSalerName: wholesalerInfo.DisplayName,
+      WholeSalerName: (wholesalerInfo && wholesalerInfo?.DisplayName) ?? '',
+      InvoiceType: dto.InvoiceType,
       InvoiceNumber: invoiceNumber,
       IdsAllowedToRead: [dto.WholeSalerId],
       CreatedDate: new Date().toISOString()
@@ -118,6 +121,7 @@ export class InvoiceService {
         ProfitMargin: x.ProfitMargin,
         TotalAmount: x.TotalAmount,
         WholeSalerId: x.WholeSalerId,
+        InvoiceType: x.InvoiceType ?? 'test',
         WholeSalerName: x.WholeSalerName,
         CreatedDate: x.CreatedDate
       });
@@ -232,12 +236,12 @@ export class InvoiceService {
     return updates;
   }
 
-  private createProductSellUpdateObject(dto: ProductSellDto): any {
-    const updates = {};
-    if (dto.ProductId != null) updates['ProductId'] = dto.ProductId;
-    if (dto.Quantity != null) updates['TotalAmount'] = dto.Quantity;
-    if (dto.SellingPrice != null) updates['SellingPrice'] = dto.SellingPrice;
-    return updates;
+  private async getDashboardStatsData(): Promise<QueryRespone> {
+    const response = new QueryRespone();
+    const wholeSalers = await this.userModel.find({ Roles: UserRoles.WholeSaler });
+    const invoices = await this.invoiceModel.find({});
+
+    return response;
   }
 
 }
