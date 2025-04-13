@@ -17,9 +17,9 @@ import { Invoice } from 'src/shared/schemas/invoice.schema';
 import { User } from 'src/shared/schemas/user.schema';
 import { GetInvoiceDto } from '../dto/product-sell/get-invoice.dto';
 import { ProductService } from './product.service';
-import { ProductSellDto, UpdateInvoiceDto } from '../dto/product-sell/update-invoice.dto';
-import { UserRoles } from 'src/shared/constant/roles.constant';
+import { UpdateInvoiceDto } from '../dto/product-sell/update-invoice.dto';
 import { INVOICE_CONSTANT } from 'src/shared/constant/invoice.constant';
+import { startOfMonth, addMonths } from 'date-fns';
 
 @Injectable()
 export class InvoiceService {
@@ -202,16 +202,16 @@ export class InvoiceService {
       } as UpdateProductDto;
       await this.productService.updateProduct(updateProductDto);
     }
-    if(sellModels.length > 0) {
+    if (sellModels.length > 0) {
       await this.productSellModel.insertMany(sellModels);
     }
-    await this.invoiceModel.findByIdAndUpdate(dto.ItemId, 
+    await this.invoiceModel.findByIdAndUpdate(dto.ItemId,
       this.createInvoiceUpdateObject(dto.PaymentAmount,
         dto.PaymentAmount - TotalCostAmount, TotalSellAmount), {
       new: true,
       runValidators: true,
     });
-    
+
     return response;
   }
 
@@ -238,11 +238,172 @@ export class InvoiceService {
 
   public async getDashboardStatsData(): Promise<QueryRespone> {
     const response = new QueryRespone();
-    const wholeSalers = await this.userModel.find({ Roles: UserRoles.WholeSaler });
-    const invoices = await this.invoiceModel.find({});
-    const sellsInfo = await this.productSellModel.find({});
-
+    const revenueGroupedByDate = await this.getRevenueGroupedByDate();
+    const productSalesInfo = await this.getProductSalesInfo();
+    const wholeSalersSalesInfo = await this.getWholeSalersSalesInfo();
+    const totalRevenueOfThisMonth = await this.getThisMonthRevenue();
+    const totalInvoices = await this.invoiceModel.countDocuments({});
+    const totalSell = await this.getThisMonthTotalSold();
+    const recentInvoiceData = await this.invoiceModel.find({}).sort({ CreatedDate: -1 }).limit(5);
+    const consumerData = wholeSalersSalesInfo.find( x => x.name == '');
+    consumerData.name = 'Consumer';
+    const responseData = {
+      SalesData: revenueGroupedByDate,
+      ProductSalesInfo: productSalesInfo,
+      WholesalerData: wholeSalersSalesInfo,
+      ThisMonthRevenue: totalRevenueOfThisMonth,
+      ThisMonthTotalInvoice: totalInvoices,
+      ThisMonthTotalSell: totalSell,
+      RecentInvoiceData: recentInvoiceData,
+    }
+    response.setData(responseData, 0)
     return response;
   }
 
+  async getRevenueGroupedByDate(): Promise<{ date: string; revenue: number }[]> {
+    const result = await this.invoiceModel.aggregate([
+      {
+        $project: {
+          date: {
+            $dateToString: {
+              format: '%Y-%m-%d',
+              date: { $toDate: '$CreatedDate' },
+            },
+          },
+          ProfitMargin: 1,
+        },
+      },
+      {
+        $group: {
+          _id: '$date',
+          revenue: { $sum: '$ProfitMargin' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          date: '$_id',
+          revenue: 1,
+        },
+      },
+      {
+        $sort: { date: 1 },
+      },
+    ]);
+    return result;
+  }
+
+  async getProductSalesInfo(): Promise<{ name: string; sales: number }[]> {
+    const result = await this.productSellModel.aggregate([
+      {
+        $group: {
+          _id: '$ProductName',
+          sales: { $sum: '$Quantity' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          name: '$_id',
+          sales: 1,
+        },
+      },
+      {
+        $sort: { name: 1 },
+      },
+    ]);
+    return result;
+  }
+
+  async getWholeSalersSalesInfo(): Promise<{ name: string; value: number }[]> {
+    const result = await this.invoiceModel.aggregate([
+      {
+        $group: {
+          _id: '$WholeSalerName',
+          value: { $sum: '$PaymentAmount' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          name: '$_id',
+          value: 1,
+        },
+      },
+      {
+        $sort: { name: 1 },
+      },
+    ]);
+    return result;
+  }
+  async getThisMonthRevenue(): Promise<number> {
+    const now = new Date();
+
+    const start = startOfMonth(now);
+    const end = startOfMonth(addMonths(now, 1));
+
+    const result = await this.invoiceModel.aggregate([
+      {
+        $addFields: {
+          CreatedDateObj: { $toDate: '$CreatedDate' }, // 👈 Convert string to date
+        },
+      },
+      {
+        $match: {
+          CreatedDateObj: {
+            $gte: start,
+            $lt: end,
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: '$ProfitMargin' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          totalRevenue: 1,
+        },
+      },
+    ]);
+    return result.length > 0 ? result[0].totalRevenue : 0;
+  }
+  async getThisMonthTotalSold(): Promise<number> {
+    const now = new Date();
+
+    const start = startOfMonth(now);
+    const end = startOfMonth(addMonths(now, 1));
+
+    const result = await this.productSellModel.aggregate([
+      {
+        $addFields: {
+          CreatedDateObj: { $toDate: '$CreatedDate' }, // 👈 Convert string to date
+        },
+      },
+      {
+        $match: {
+          CreatedDateObj: {
+            $gte: start,
+            $lt: end,
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalSell: { $sum: '$Quantity' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          totalSell: 1,
+        },
+      },
+    ]);
+    return result.length > 0 ? result[0].totalSell : 0;
+  }
 }
