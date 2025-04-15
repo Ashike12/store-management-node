@@ -10,7 +10,7 @@ export class UpdateProductDto {
 
   readonly SellingPrice: number;
 
-  readonly Quantity: number;
+  Quantity: number;
   
   readonly Description: string;
 }

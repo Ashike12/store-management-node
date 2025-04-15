@@ -12,6 +12,7 @@ import { CreateInvoiceDto } from './dto/product-sell/create-invoice.dto';
 import { GetInvoiceDto } from './dto/product-sell/get-invoice.dto';
 import { InvoiceService } from './services/invoice.service';
 import { UpdateInvoiceDto } from './dto/product-sell/update-invoice.dto';
+import { AddProductionDto } from './dto/product/add-production.dto';
 
 @Controller('business')
 export class BusinessController {
@@ -85,5 +86,12 @@ export class BusinessController {
   @UseGuards(AuthGuard())
   GetDashboardData(): Promise<QueryRespone> {
     return this.invoiceService.getDashboardStatsData();
+  }
+
+  @Post('AddProduction')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  AddProduction(@Body() dto: AddProductionDto): Promise<CommandResponse> {
+    return this.productService.addProduction(dto);
   }
 }

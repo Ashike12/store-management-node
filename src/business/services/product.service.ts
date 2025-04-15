@@ -19,6 +19,7 @@ import { ProductSell } from 'src/shared/schemas/productSell.schema';
 import { Invoice } from 'src/shared/schemas/invoice.schema';
 import { User } from 'src/shared/schemas/user.schema';
 import { GetInvoiceDto } from '../dto/product-sell/get-invoice.dto';
+import { AddProductionDto } from '../dto/product/add-production.dto';
 
 @Injectable()
 export class ProductService {
@@ -126,4 +127,18 @@ export class ProductService {
     return response;
   }
 
+  async addProduction(dto: AddProductionDto): Promise<CommandResponse> {
+    const response = new CommandResponse();
+
+    for (const eachProduct of dto.ProductionInfo) {
+      let productUpdateDto = new UpdateProductDto();
+      productUpdateDto.Quantity = eachProduct.Quantity;
+      await this.productModel.findByIdAndUpdate(eachProduct.ProductId, this.createUpdateObject(productUpdateDto), {
+        new: true,
+        runValidators: true,
+      });
+    }
+
+    return response;
+  }
 }
