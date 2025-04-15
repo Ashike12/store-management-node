@@ -131,6 +131,7 @@ export class AuthService {
       new: true,
       runValidators: true,
     });
+    await this.redisClient.del(dto.ActivationId)
     return response;
   }
 
