@@ -246,7 +246,9 @@ export class InvoiceService {
     const totalSell = await this.getThisMonthTotalSold();
     const recentInvoiceData = await this.invoiceModel.find({}).sort({ CreatedDate: -1 }).limit(5);
     const consumerData = wholeSalersSalesInfo.find( x => x.name == '');
-    consumerData.name = 'Consumer';
+    if(consumerData) {
+      consumerData.name = 'Consumer';
+    }
     const responseData = {
       SalesData: revenueGroupedByDate,
       ProductSalesInfo: productSalesInfo,
