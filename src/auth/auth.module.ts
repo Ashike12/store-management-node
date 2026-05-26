@@ -21,7 +21,7 @@ import { UserLoginLogSchema } from 'src/shared/schemas/userloginlog.schema';
         return {
           secret: config.get<string>('JWT_SECRET'),
           signOptions: {
-            expiresIn: config.get<string | number>('JWT_EXPIRES'),
+            expiresIn: config.get<string>('JWT_EXPIRES') as any,
           },
         };
       },

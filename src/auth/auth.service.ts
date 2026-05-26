@@ -65,10 +65,10 @@ export class AuthService {
     const { Email, Password } = loginDto;
 
     const user = await this.userModel.findOne({ Email });
-    console.log(user.Email)
     if (!user) {
       throw new UnauthorizedException('Incorrect email or password');
     }
+    console.log(user.Email)
     if (user && user.Roles.indexOf(UserRoles.Customer) > -1 && !user.Active) {
       throw new UnauthorizedException('Inactive Customer');
     }

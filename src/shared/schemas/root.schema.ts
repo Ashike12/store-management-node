@@ -1,7 +1,6 @@
 import { Prop } from "@nestjs/mongoose";
-import { Document } from 'mongoose';
 
-export class RootSchema extends Document {
+export class RootSchema {
     @Prop()
     _id: string;
 

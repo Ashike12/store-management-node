@@ -1,8 +1,7 @@
-import { IsNotEmpty, IsDate, IsString } from 'class-validator';
+import { IsIn, IsNotEmpty } from 'class-validator';
 import { INVOICE_CONSTANT } from 'src/shared/constant/invoice.constant';
 export class CreateInvoiceDto {
-  @IsNotEmpty()
-  readonly ProductSellInfo: ProductSellDto[];
+  readonly ProductSellInfo: ProductSellDto[] = [];
 
   @IsNotEmpty()
   readonly PaymentAmount: number;
@@ -10,6 +9,7 @@ export class CreateInvoiceDto {
   readonly WholeSalerId: string;
 
   @IsNotEmpty()
+  @IsIn([INVOICE_CONSTANT.WHOLESALE, INVOICE_CONSTANT.CONSUMER, INVOICE_CONSTANT.DUE_PAYMENT])
   readonly InvoiceType: string = INVOICE_CONSTANT.WHOLESALE;
 }
 
