@@ -11,6 +11,12 @@ export class Product extends RootSchema {
   @Prop()
   Description: string;
 
+  @Prop({ type: [String], default: [] })
+  ImageLinks: string[];
+
+  @Prop()
+  VideoLink: string;
+
   @Prop()
   MakingPrice: number;
 

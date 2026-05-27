@@ -46,6 +46,8 @@ export class ProductService {
     const dataModel = {
       _id: this.sharedService.getUid(),
       ProductName: dto.ProductName,
+      ImageLinks: dto.ImageLinks ?? [],
+      VideoLink: dto.VideoLink,
       MakingPrice: dto.MakingPrice,
       SellingPrice: dto.SellingPrice,
       Quantity: dto.Quantity,
@@ -62,6 +64,8 @@ export class ProductService {
   private createUpdateObject(dto: UpdateProductDto): any {
     const updates = {};
     if (dto.ProductName != null) updates['ProductName'] = dto.ProductName;
+    if (dto.ImageLinks != null) updates['ImageLinks'] = dto.ImageLinks;
+    if (dto.VideoLink != null) updates['VideoLink'] = dto.VideoLink;
     if (dto.MakingPrice != null) updates['MakingPrice'] = dto.MakingPrice;
     if (dto.SellingPrice != null) updates['SellingPrice'] = dto.SellingPrice;
     if (dto.Quantity != null) updates['Quantity'] = dto.Quantity;
@@ -113,10 +117,15 @@ export class ProductService {
 
     const responseCompanies = [];
     datas.forEach(x => {
+      const imageLinks = x.ImageLinks && x.ImageLinks.length > 0
+        ? x.ImageLinks
+        : (((x as any).ImageLink && typeof (x as any).ImageLink === 'string') ? [(x as any).ImageLink] : []);
       responseCompanies.push({
         ItemId: x._id,
         ProductName: x.ProductName,
         Description: x.Description,
+        ImageLinks: imageLinks,
+        VideoLink: x.VideoLink ?? '',
         MakingPrice: x.MakingPrice,
         SellingPrice: x.SellingPrice,
         Quantity: x.Quantity,
