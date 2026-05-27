@@ -6,6 +6,10 @@ export class UpdateProductDto {
 
   readonly ProductName: string;
 
+  readonly Category: string;
+
+  readonly SubCategory: string;
+
   @IsArray()
   @IsString({ each: true })
   readonly ImageLinks: string[];
@@ -14,7 +18,11 @@ export class UpdateProductDto {
 
   readonly MakingPrice: number;
 
-  readonly SellingPrice: number;
+  readonly WholeSalerPrice: number;
+
+  readonly EndUserPrice: number;
+
+  readonly EndUserDiscountedPrice: number;
 
   Quantity: number;
   

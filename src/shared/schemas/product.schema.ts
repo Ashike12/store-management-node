@@ -9,6 +9,12 @@ export class Product extends RootSchema {
   ProductName: string;
 
   @Prop()
+  Category: string;
+
+  @Prop()
+  SubCategory: string;
+
+  @Prop()
   Description: string;
 
   @Prop({ type: [String], default: [] })
@@ -21,7 +27,13 @@ export class Product extends RootSchema {
   MakingPrice: number;
 
   @Prop()
-  SellingPrice: number;
+  WholeSalerPrice: number;
+
+  @Prop()
+  EndUserPrice: number;
+
+  @Prop()
+  EndUserDiscountedPrice: number;
 
   @Prop()
   Quantity: number;

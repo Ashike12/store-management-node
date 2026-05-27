@@ -20,6 +20,7 @@ import { Invoice } from 'src/shared/schemas/invoice.schema';
 import { User } from 'src/shared/schemas/user.schema';
 import { GetInvoiceDto } from '../dto/product-sell/get-invoice.dto';
 import { AddProductionDto } from '../dto/product/add-production.dto';
+import { PRODUCT_CATEGORY_SUBCATEGORY_MAP } from 'src/shared/constant/product.constant';
 
 @Injectable()
 export class ProductService {
@@ -42,14 +43,19 @@ export class ProductService {
     if (existingData != null) {
       throw new BadRequestException('Same product already exists: ' + dto.ProductName);
     }
+    this.validateCategoryAndSubCategory(dto.Category, dto.SubCategory);
 
     const dataModel = {
       _id: this.sharedService.getUid(),
       ProductName: dto.ProductName,
+      Category: dto.Category,
+      SubCategory: dto.SubCategory,
       ImageLinks: dto.ImageLinks ?? [],
       VideoLink: dto.VideoLink,
       MakingPrice: dto.MakingPrice,
-      SellingPrice: dto.SellingPrice,
+      WholeSalerPrice: dto.WholeSalerPrice,
+      EndUserPrice: dto.EndUserPrice,
+      EndUserDiscountedPrice: dto.EndUserDiscountedPrice,
       Quantity: dto.Quantity,
       Description: dto.Description,
       RolesAllowedToRead: [UserRoles.Admin],
@@ -64,13 +70,28 @@ export class ProductService {
   private createUpdateObject(dto: UpdateProductDto): any {
     const updates = {};
     if (dto.ProductName != null) updates['ProductName'] = dto.ProductName;
+    if (dto.Category != null) updates['Category'] = dto.Category;
+    if (dto.SubCategory != null) updates['SubCategory'] = dto.SubCategory;
     if (dto.ImageLinks != null) updates['ImageLinks'] = dto.ImageLinks;
     if (dto.VideoLink != null) updates['VideoLink'] = dto.VideoLink;
     if (dto.MakingPrice != null) updates['MakingPrice'] = dto.MakingPrice;
-    if (dto.SellingPrice != null) updates['SellingPrice'] = dto.SellingPrice;
+    if (dto.WholeSalerPrice != null) updates['WholeSalerPrice'] = dto.WholeSalerPrice;
+    if (dto.EndUserPrice != null) updates['EndUserPrice'] = dto.EndUserPrice;
+    if (dto.EndUserDiscountedPrice != null) updates['EndUserDiscountedPrice'] = dto.EndUserDiscountedPrice;
     if (dto.Quantity != null) updates['Quantity'] = dto.Quantity;
     if (dto.Description != null) updates['Description'] = dto.Description;
     return updates;
+  }
+
+  private validateCategoryAndSubCategory(category: string, subCategory: string): void {
+    const allowedSubCategories = PRODUCT_CATEGORY_SUBCATEGORY_MAP[category];
+    if (!allowedSubCategories) {
+      throw new BadRequestException('Invalid category: ' + category);
+    }
+
+    if (!allowedSubCategories.includes(subCategory)) {
+      throw new BadRequestException('Invalid sub category for selected category');
+    }
   }
 
   async updateProduct(dto: UpdateProductDto): Promise<CommandResponse> {
@@ -79,6 +100,12 @@ export class ProductService {
     // console.log(dto.ItemId);
     if (existingData == null) {
       throw new BadRequestException('No Data found with ItemId: ' + dto.ItemId);
+    }
+
+    const nextCategory = dto.Category ?? (existingData as any).Category;
+    const nextSubCategory = dto.SubCategory ?? (existingData as any).SubCategory;
+    if (nextCategory && nextSubCategory) {
+      this.validateCategoryAndSubCategory(nextCategory, nextSubCategory);
     }
 
     await this.productModel.findByIdAndUpdate(dto.ItemId, this.createUpdateObject(dto), {
@@ -123,11 +150,15 @@ export class ProductService {
       responseCompanies.push({
         ItemId: x._id,
         ProductName: x.ProductName,
+        Category: (x as any).Category ?? '',
+        SubCategory: (x as any).SubCategory ?? '',
         Description: x.Description,
         ImageLinks: imageLinks,
         VideoLink: x.VideoLink ?? '',
         MakingPrice: x.MakingPrice,
-        SellingPrice: x.SellingPrice,
+        WholeSalerPrice: (x as any).WholeSalerPrice ?? (x as any).SellingPrice ?? 0,
+        EndUserPrice: (x as any).EndUserPrice ?? (x as any).SellingPrice ?? 0,
+        EndUserDiscountedPrice: (x as any).EndUserDiscountedPrice ?? (x as any).SellingPrice ?? 0,
         Quantity: x.Quantity,
         CreatedDate: x.CreatedDate
       });

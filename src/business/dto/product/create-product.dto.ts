@@ -1,4 +1,4 @@
-import { IsArray, IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { IsArray, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 export class CreateProductDto {
   @IsString()
   @IsNotEmpty()
@@ -8,12 +8,20 @@ export class CreateProductDto {
   @IsNotEmpty()
   readonly Description: string;
 
+  @IsString()
+  @IsNotEmpty()
+  readonly Category: string;
+
+  @IsString()
+  @IsNotEmpty()
+  readonly SubCategory: string;
+
   @IsArray()
   @IsString({ each: true })
   readonly ImageLinks: string[];
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   readonly VideoLink: string;
 
   @IsNumber()
@@ -22,7 +30,15 @@ export class CreateProductDto {
 
   @IsNumber()
   @IsNotEmpty()
-  readonly SellingPrice: number;
+  readonly WholeSalerPrice: number;
+
+  @IsNumber()
+  @IsNotEmpty()
+  readonly EndUserPrice: number;
+
+  @IsNumber()
+  @IsNotEmpty()
+  readonly EndUserDiscountedPrice: number;
 
   @IsNumber()
   @IsNotEmpty()
