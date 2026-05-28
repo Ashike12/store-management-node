@@ -1,4 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
+import '@nestjs/core';
 import * as path from 'path';
 import * as Module from 'module';
 
