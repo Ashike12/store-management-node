@@ -1,8 +1,8 @@
 import { Controller, Post, UseGuards, HttpCode, Body, Query, Req } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { QueryRespone } from 'src/shared/response/query.response';
+import { QueryRespone } from '../shared/response/query.response';
 import { Query as ExpressQuery } from 'express-serve-static-core';
-import { CommandResponse } from 'src/shared/response/command.response';
+import { CommandResponse } from '../shared/response/command.response';
 import { ProductService } from './services/product.service';
 import { GetProductDto } from './dto/product/get-product.dto';
 import { CreateProductDto } from './dto/product/create-product.dto';

@@ -7,10 +7,10 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { UserSchema } from '../shared/schemas/user.schema';
-import { SharedService } from 'src/services/shared.service';
-import { RedisHelperService } from 'src/services/redis-helper.service';
-import { FeatureEndpointMapSchema } from 'src/shared/schemas/FeatureEndpointMap.schema';
-import { UserLoginLogSchema } from 'src/shared/schemas/userloginlog.schema';
+import { SharedService } from '../services/shared.service';
+import { RedisHelperService } from '../services/redis-helper.service';
+import { FeatureEndpointMapSchema } from '../shared/schemas/FeatureEndpointMap.schema';
+import { UserLoginLogSchema } from '../shared/schemas/userloginlog.schema';
 
 @Module({
   imports: [

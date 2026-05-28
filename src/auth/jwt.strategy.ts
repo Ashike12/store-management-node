@@ -4,8 +4,8 @@ import { PassportStrategy } from '@nestjs/passport';
 import { Model } from 'mongoose';
 import { Strategy, ExtractJwt } from 'passport-jwt';
 import { User } from '../shared/schemas/user.schema';
-import { TokenInfo } from 'src/shared/dto/token-info.dto';
-import { FeatureEndpointMap } from 'src/shared/schemas/FeatureEndpointMap.schema';
+import { TokenInfo } from '../shared/dto/token-info.dto';
+import { FeatureEndpointMap } from '../shared/schemas/FeatureEndpointMap.schema';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {

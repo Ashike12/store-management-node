@@ -1,5 +1,5 @@
 import { IsIn, IsNotEmpty } from 'class-validator';
-import { INVOICE_CONSTANT } from 'src/shared/constant/invoice.constant';
+import { INVOICE_CONSTANT } from '../../../shared/constant/invoice.constant';
 export class CreateInvoiceDto {
   readonly ProductSellInfo: ProductSellDto[] = [];
 

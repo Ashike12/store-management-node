@@ -3,9 +3,9 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
 import { UserController } from './user.controller';
 import { UserService } from './user.service';
-import { UserSchema } from 'src/shared/schemas/user.schema';
-import { SharedService } from 'src/services/shared.service';
-import { RedisHelperService } from 'src/services/redis-helper.service';
+import { UserSchema } from '../shared/schemas/user.schema';
+import { SharedService } from '../services/shared.service';
+import { RedisHelperService } from '../services/redis-helper.service';
 
 @Module({
   imports: [

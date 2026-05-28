@@ -4,12 +4,12 @@ import { LoginDto } from './dto/login.dto';
 import { SignUpDto } from './dto/signup.dto';
 import { RefreshDto } from './dto/RefreshDto';
 import { SetPasswordDto } from './dto/set-password.dto';
-import { CommandResponse } from 'src/shared/response/command.response';
+import { CommandResponse } from '../shared/response/command.response';
 import { AuthGuard } from '@nestjs/passport';
 import { GetLoginLogsDto } from './dto/getloginlog.dto';
-import { QueryRespone } from 'src/shared/response/query.response';
+import { QueryRespone } from '../shared/response/query.response';
 import { Request } from 'express';
-import { User } from 'src/shared/schemas/user.schema';
+import { User } from '../shared/schemas/user.schema';
 
 @Controller('auth')
 export class AuthController {

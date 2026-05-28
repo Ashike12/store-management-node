@@ -9,13 +9,13 @@ import { InjectModel } from '@nestjs/mongoose';
 import * as mongoose from 'mongoose';
 import { Query } from 'express-serve-static-core';
 import { User } from '../shared/schemas/user.schema';
-import { CommandResponse } from 'src/shared/response/command.response';
+import { CommandResponse } from '../shared/response/command.response';
 import { CreateUserDto } from './dto/create-user.dto';
-import { SharedService } from 'src/services/shared.service';
+import { SharedService } from '../services/shared.service';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { QueryRespone } from 'src/shared/response/query.response';
-import { RedisHelperService } from 'src/services/redis-helper.service';
-import { UserRoles } from 'src/shared/constant/roles.constant';
+import { QueryRespone } from '../shared/response/query.response';
+import { RedisHelperService } from '../services/redis-helper.service';
+import { UserRoles } from '../shared/constant/roles.constant';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()

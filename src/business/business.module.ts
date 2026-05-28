@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { BusinessController } from './business.controller';
-import { AuthModule } from 'src/auth/auth.module';
-import { SharedService } from 'src/services/shared.service';
-import { UserSchema } from 'src/shared/schemas/user.schema';
-import { ProductSchema } from 'src/shared/schemas/product.schema';
-import { ProductSellSchema } from 'src/shared/schemas/productSell.schema';
-import { InvoiceSchema } from 'src/shared/schemas/invoice.schema';
+import { AuthModule } from '../auth/auth.module';
+import { SharedService } from '../services/shared.service';
+import { UserSchema } from '../shared/schemas/user.schema';
+import { ProductSchema } from '../shared/schemas/product.schema';
+import { ProductSellSchema } from '../shared/schemas/productSell.schema';
+import { InvoiceSchema } from '../shared/schemas/invoice.schema';
 import { ProductService } from './services/product.service';
 import { InvoiceService } from './services/invoice.service';
 

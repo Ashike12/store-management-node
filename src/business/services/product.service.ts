@@ -3,24 +3,24 @@ import {
   Injectable,
 } from '@nestjs/common';
 import * as mongoose from 'mongoose';
-import { UserRoles } from 'src/shared/constant/roles.constant';
+import { UserRoles } from '../../shared/constant/roles.constant';
 import { InjectModel } from '@nestjs/mongoose';
 import { Query } from 'express-serve-static-core';
-import { QueryRespone } from 'src/shared/response/query.response';
-import { CommandResponse } from 'src/shared/response/command.response';
-import { SharedService } from 'src/services/shared.service';
+import { QueryRespone } from '../../shared/response/query.response';
+import { CommandResponse } from '../../shared/response/command.response';
+import { SharedService } from '../../services/shared.service';
 import { indexOf as _indexOf } from 'lodash';
 import { CreateProductDto } from '../dto/product/create-product.dto';
-import { Product } from 'src/shared/schemas/product.schema';
+import { Product } from '../../shared/schemas/product.schema';
 import { UpdateProductDto } from '../dto/product/update-product.dto';
 import { GetProductDto } from '../dto/product/get-product.dto';
 import { CreateInvoiceDto, ProductSellDto } from '../dto/product-sell/create-invoice.dto';
-import { ProductSell } from 'src/shared/schemas/productSell.schema';
-import { Invoice } from 'src/shared/schemas/invoice.schema';
-import { User } from 'src/shared/schemas/user.schema';
+import { ProductSell } from '../../shared/schemas/productSell.schema';
+import { Invoice } from '../../shared/schemas/invoice.schema';
+import { User } from '../../shared/schemas/user.schema';
 import { GetInvoiceDto } from '../dto/product-sell/get-invoice.dto';
 import { AddProductionDto } from '../dto/product/add-production.dto';
-import { PRODUCT_CATEGORY_SUBCATEGORY_MAP } from 'src/shared/constant/product.constant';
+import { PRODUCT_CATEGORY_SUBCATEGORY_MAP } from '../../shared/constant/product.constant';
 
 @Injectable()
 export class ProductService {

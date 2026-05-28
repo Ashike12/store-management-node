@@ -9,15 +9,15 @@ import { SignUpDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { SharedService } from './../services/shared.service';
 import { RefreshDto } from './dto/RefreshDto';
-import { RedisHelperService } from 'src/services/redis-helper.service';
-import { User } from 'src/shared/schemas/user.schema';
-import { CommandResponse } from 'src/shared/response/command.response';
+import { RedisHelperService } from '../services/redis-helper.service';
+import { User } from '../shared/schemas/user.schema';
+import { CommandResponse } from '../shared/response/command.response';
 import { SetPasswordDto } from './dto/set-password.dto';
-import { AnnonymousTokenInfo, TokenInfo } from 'src/shared/dto/token-info.dto';
-import { UserRoles } from 'src/shared/constant/roles.constant';
-import { UserLoginLog } from 'src/shared/schemas/userloginlog.schema';
+import { AnnonymousTokenInfo, TokenInfo } from '../shared/dto/token-info.dto';
+import { UserRoles } from '../shared/constant/roles.constant';
+import { UserLoginLog } from '../shared/schemas/userloginlog.schema';
 import { GetLoginLogResponseDto } from './dto/getloginlog.response.dto';
-import { QueryRespone } from 'src/shared/response/query.response';
+import { QueryRespone } from '../shared/response/query.response';
 import { GetLoginLogsDto } from './dto/getloginlog.dto';
 
 @Injectable()

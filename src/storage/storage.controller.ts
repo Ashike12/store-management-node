@@ -6,9 +6,9 @@ import { Response, Request } from 'express';
 import { createReadStream, existsSync, mkdirSync, unlink } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { StorageService } from './storage.service';
-import { CommandResponse } from 'src/shared/response/command.response';
+import { CommandResponse } from '../shared/response/command.response';
 import { AuthGuard } from '@nestjs/passport';
-import { QueryRespone } from 'src/shared/response/query.response';
+import { QueryRespone } from '../shared/response/query.response';
 import * as path from 'path';
 
 const fileStorageBasePath = process.env.SRORAGE_LOCATION;

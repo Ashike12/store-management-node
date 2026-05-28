@@ -5,20 +5,20 @@ import {
 import * as mongoose from 'mongoose';
 import { InjectModel } from '@nestjs/mongoose';
 import { Query } from 'express-serve-static-core';
-import { QueryRespone } from 'src/shared/response/query.response';
-import { CommandResponse } from 'src/shared/response/command.response';
-import { SharedService } from 'src/services/shared.service';
+import { QueryRespone } from '../../shared/response/query.response';
+import { CommandResponse } from '../../shared/response/command.response';
+import { SharedService } from '../../services/shared.service';
 import { indexOf as _indexOf } from 'lodash';
-import { Product } from 'src/shared/schemas/product.schema';
+import { Product } from '../../shared/schemas/product.schema';
 import { UpdateProductDto } from '../dto/product/update-product.dto';
 import { CreateInvoiceDto } from '../dto/product-sell/create-invoice.dto';
-import { ProductSell } from 'src/shared/schemas/productSell.schema';
-import { Invoice } from 'src/shared/schemas/invoice.schema';
-import { User } from 'src/shared/schemas/user.schema';
+import { ProductSell } from '../../shared/schemas/productSell.schema';
+import { Invoice } from '../../shared/schemas/invoice.schema';
+import { User } from '../../shared/schemas/user.schema';
 import { GetInvoiceDto } from '../dto/product-sell/get-invoice.dto';
 import { ProductService } from './product.service';
 import { UpdateInvoiceDto } from '../dto/product-sell/update-invoice.dto';
-import { INVOICE_CONSTANT } from 'src/shared/constant/invoice.constant';
+import { INVOICE_CONSTANT } from '../../shared/constant/invoice.constant';
 import { startOfMonth, addMonths } from 'date-fns';
 
 @Injectable()

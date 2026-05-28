@@ -5,12 +5,12 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import * as mongoose from 'mongoose';
 import { Query } from 'express-serve-static-core';
-import { CommandResponse } from 'src/shared/response/command.response';
-import { FileInfo } from 'src/shared/schemas/File.schema';
-import { UserRoles } from 'src/shared/constant/roles.constant';
-import { QueryRespone } from 'src/shared/response/query.response';
-import { User } from 'src/shared/schemas/user.schema';
-import { TokenInfo } from 'src/shared/dto/token-info.dto';
+import { CommandResponse } from '../shared/response/command.response';
+import { FileInfo } from '../shared/schemas/File.schema';
+import { UserRoles } from '../shared/constant/roles.constant';
+import { QueryRespone } from '../shared/response/query.response';
+import { User } from '../shared/schemas/user.schema';
+import { TokenInfo } from '../shared/dto/token-info.dto';
 
 @Injectable()
 export class StorageService {

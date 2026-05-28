@@ -16,8 +16,8 @@ import { UpdateUserDto } from './dto/update-user.dto';
 
 import { Query as ExpressQuery } from 'express-serve-static-core';
 import { AuthGuard } from '@nestjs/passport';
-import { CommandResponse } from 'src/shared/response/command.response';
-import { QueryRespone } from 'src/shared/response/query.response';
+import { CommandResponse } from '../shared/response/command.response';
+import { QueryRespone } from '../shared/response/query.response';
 import { GetByEmailDto } from './dto/getByEmail.dto';
 import { DeleteUserDto } from './dto/deleteuser.dto';
 
