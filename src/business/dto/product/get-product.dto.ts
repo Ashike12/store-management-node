@@ -1,5 +1,22 @@
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsNumber, IsOptional, IsString } from 'class-validator';
 export class GetProductDto {
+  @IsOptional()
   @IsString()
   readonly ItemId: string;
+
+  @IsOptional()
+  @IsString()
+  readonly Category: string;
+
+  @IsOptional()
+  @IsString()
+  readonly SubCategory: string;
+
+  @IsOptional()
+  @IsNumber()
+  readonly MinMakingPrice: number;
+
+  @IsOptional()
+  @IsNumber()
+  readonly MaxMakingPrice: number;
 }

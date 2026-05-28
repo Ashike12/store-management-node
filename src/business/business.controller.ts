@@ -30,6 +30,13 @@ export class BusinessController {
     return this.productService.getProduct(query, dto);
   }
 
+  @Post('GetClientProducts')
+  @HttpCode(200)
+  GetClientProducts(@Query() query: ExpressQuery,
+    @Body() dto: GetProductDto): Promise<QueryRespone> {
+    return this.productService.getClientProduct(query, dto);
+  }
+
   @Post('CreateProduct')
   @HttpCode(200)
   @UseGuards(AuthGuard())

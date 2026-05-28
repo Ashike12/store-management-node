@@ -129,11 +129,55 @@ export class ProductService {
 
   async getProduct(query: Query, dto: GetProductDto): Promise<QueryRespone> {
     const response = new QueryRespone();
+    const { datas, dataCount } = await this.queryProducts(query, dto);
+
+    const responseCompanies = [];
+    datas.forEach(x => {
+      responseCompanies.push(this.mapAdminProductResponse(x));
+    });
+    response.setData(responseCompanies, dataCount);
+    return response;
+  }
+
+  async getClientProduct(query: Query, dto: GetProductDto): Promise<QueryRespone> {
+    const response = new QueryRespone();
+    const { datas, dataCount } = await this.queryProducts(query, dto);
+
+    const responseCompanies = [];
+    datas.forEach(x => {
+      responseCompanies.push(this.mapClientProductResponse(x));
+    });
+    response.setData(responseCompanies, dataCount);
+    return response;
+  }
+
+  private async queryProducts(query: Query, dto: GetProductDto): Promise<{ datas: Product[]; dataCount: number }> {
     const resPerPage = Number(query.size) ?? 10000;
     const currentPage = Number(query.page) || 1;
     const skip = resPerPage * (currentPage - 1);
-    // console.log(userId);
-    let mongoQuery = dto.ItemId ? { _id: dto.ItemId } : {};
+    const mongoQuery: Record<string, any> = {};
+
+    if (dto.ItemId) {
+      mongoQuery._id = dto.ItemId;
+    }
+
+    if (dto.Category && dto.Category !== 'ALL') {
+      mongoQuery.Category = dto.Category;
+    }
+
+    if (dto.SubCategory && dto.SubCategory !== 'ALL') {
+      mongoQuery.SubCategory = dto.SubCategory;
+    }
+
+    if (dto.MinMakingPrice != null || dto.MaxMakingPrice != null) {
+      mongoQuery.MakingPrice = {};
+      if (dto.MinMakingPrice != null) {
+        mongoQuery.MakingPrice.$gte = dto.MinMakingPrice;
+      }
+      if (dto.MaxMakingPrice != null) {
+        mongoQuery.MakingPrice.$lte = dto.MaxMakingPrice;
+      }
+    }
 
     const datas = await this.productModel
       .find(mongoQuery)
@@ -141,30 +185,47 @@ export class ProductService {
       .skip(skip);
     const dataCount = await this.productModel
       .countDocuments(mongoQuery);
+    return { datas, dataCount };
+  }
 
-    const responseCompanies = [];
-    datas.forEach(x => {
-      const imageLinks = x.ImageLinks && x.ImageLinks.length > 0
-        ? x.ImageLinks
-        : (((x as any).ImageLink && typeof (x as any).ImageLink === 'string') ? [(x as any).ImageLink] : []);
-      responseCompanies.push({
-        ItemId: x._id,
-        ProductName: x.ProductName,
-        Category: (x as any).Category ?? '',
-        SubCategory: (x as any).SubCategory ?? '',
-        Description: x.Description,
-        ImageLinks: imageLinks,
-        VideoLink: x.VideoLink ?? '',
-        MakingPrice: x.MakingPrice,
-        WholeSalerPrice: (x as any).WholeSalerPrice ?? (x as any).SellingPrice ?? 0,
-        EndUserPrice: (x as any).EndUserPrice ?? (x as any).SellingPrice ?? 0,
-        EndUserDiscountedPrice: (x as any).EndUserDiscountedPrice ?? (x as any).SellingPrice ?? 0,
-        Quantity: x.Quantity,
-        CreatedDate: x.CreatedDate
-      });
-    });
-    response.setData(responseCompanies, dataCount);
-    return response;
+  private mapAdminProductResponse(x: Product): any {
+    const imageLinks = x.ImageLinks && x.ImageLinks.length > 0
+      ? x.ImageLinks
+      : (((x as any).ImageLink && typeof (x as any).ImageLink === 'string') ? [(x as any).ImageLink] : []);
+    return {
+      ItemId: x._id,
+      ProductName: x.ProductName,
+      Category: (x as any).Category ?? '',
+      SubCategory: (x as any).SubCategory ?? '',
+      Description: x.Description,
+      ImageLinks: imageLinks,
+      VideoLink: x.VideoLink ?? '',
+      MakingPrice: x.MakingPrice,
+      WholeSalerPrice: (x as any).WholeSalerPrice ?? (x as any).SellingPrice ?? 0,
+      EndUserPrice: (x as any).EndUserPrice ?? (x as any).SellingPrice ?? 0,
+      EndUserDiscountedPrice: (x as any).EndUserDiscountedPrice ?? (x as any).SellingPrice ?? 0,
+      Quantity: x.Quantity,
+      CreatedDate: x.CreatedDate
+    };
+  }
+
+  private mapClientProductResponse(x: Product): any {
+    const imageLinks = x.ImageLinks && x.ImageLinks.length > 0
+      ? x.ImageLinks
+      : (((x as any).ImageLink && typeof (x as any).ImageLink === 'string') ? [(x as any).ImageLink] : []);
+    return {
+      ItemId: x._id,
+      ProductName: x.ProductName,
+      Category: (x as any).Category ?? '',
+      SubCategory: (x as any).SubCategory ?? '',
+      Description: x.Description,
+      ImageLinks: imageLinks,
+      VideoLink: x.VideoLink ?? '',
+      EndUserPrice: (x as any).EndUserPrice ?? (x as any).SellingPrice ?? 0,
+      EndUserDiscountedPrice: (x as any).EndUserDiscountedPrice ?? (x as any).SellingPrice ?? 0,
+      Quantity: x.Quantity,
+      CreatedDate: x.CreatedDate
+    };
   }
 
   async addProduction(dto: AddProductionDto): Promise<CommandResponse> {
