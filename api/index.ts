@@ -1,5 +1,14 @@
 import type { INestApplication } from '@nestjs/common';
-import { createNestApp } from '../src/bootstrap-app';
+import * as path from 'path';
+import * as Module from 'module';
+
+// Vercel runtime does not automatically resolve TypeScript baseUrl aliases like `src/...`.
+// Register project root as a module lookup path before loading Nest modules.
+const projectRoot = path.resolve(__dirname, '..');
+process.env.NODE_PATH = process.env.NODE_PATH
+  ? `${process.env.NODE_PATH}${path.delimiter}${projectRoot}`
+  : projectRoot;
+(Module as any)._initPaths();
 
 let cachedApp: INestApplication | null = null;
 let appInitPromise: Promise<INestApplication> | null = null;
@@ -11,6 +20,7 @@ async function getApp(): Promise<INestApplication> {
 
   if (!appInitPromise) {
     appInitPromise = (async () => {
+      const { createNestApp } = await import('../src/bootstrap-app');
       const app = await createNestApp();
       await app.init();
       cachedApp = app;
