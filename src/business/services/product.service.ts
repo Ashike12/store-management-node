@@ -39,7 +39,7 @@ export class ProductService {
   async createProduct(dto: CreateProductDto): Promise<CommandResponse> {
     const response = new CommandResponse();
 
-    const existingData = await this.productModel.findOne({ ProductName: dto.ProductName });
+    const existingData = await this.productModel.findOne({ ProductName: dto.ProductName, Category: dto.Category, SubCategory: dto.SubCategory });
     if (existingData != null) {
       throw new BadRequestException('Same product already exists: ' + dto.ProductName);
     }
