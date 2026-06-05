@@ -17,6 +17,8 @@ import { QueryRespone } from '../shared/response/query.response';
 import { RedisHelperService } from '../services/redis-helper.service';
 import { UserRoles } from '../shared/constant/roles.constant';
 import * as bcrypt from 'bcryptjs';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Injectable()
 export class UserService {
@@ -105,6 +107,28 @@ export class UserService {
     return response;
   }
 
+  async getCurrentUser(loggedInUserInfo: User): Promise<QueryRespone> {
+    const response = new QueryRespone();
+    const user = await this.userModel.findById(loggedInUserInfo._id);
+    if (!user) {
+      throw new NotFoundException('User not found.');
+    }
+
+    response.setData({
+      ItemId: user._id,
+      Email: user.Email || '',
+      FirstName: user.FirstName || '',
+      LastName: user.LastName || '',
+      DisplayName: user.DisplayName || '',
+      Phone: user.Phone || '',
+      DateOfBirth: user.DateOfBirth || null,
+      Address: user.Address || '',
+      Active: user.Active,
+      CreatedDate: user.CreatedDate,
+    }, 0);
+    return response;
+  }
+
   async createCustomer(dto: CreateUserDto, loggedInUserInfo: User): Promise<CommandResponse> {
     const response = new CommandResponse();
     const existingUserCount = await this.userModel.countDocuments({ Email: dto.Email });
@@ -143,9 +167,21 @@ export class UserService {
     if (userDto.LastName != null && userDto.LastName != '') updates['LastName'] = userDto.LastName;
     if (userDto.DisplayName != null && userDto.DisplayName != '') updates['DisplayName'] = userDto.DisplayName;
     if (userDto.Email != null && userDto.Email != '') updates['Email'] = userDto.Email;
+    if (userDto.Phone != null && userDto.Phone != '') updates['Phone'] = userDto.Phone;
     if (userDto.DateOfBirth != null) updates['DateOfBirth'] = userDto.DateOfBirth;
     if (userDto.Address != null && userDto.Address != '') updates['Address'] = userDto.Address;
     if (userDto.Active != null) updates['Active'] = userDto.Active;
+    return updates;
+  }
+
+  private createProfileUpdateObject(userDto: UpdateProfileDto): any {
+    const updates = {};
+    if (userDto.FirstName != null) updates['FirstName'] = userDto.FirstName;
+    if (userDto.LastName != null) updates['LastName'] = userDto.LastName;
+    if (userDto.DisplayName != null) updates['DisplayName'] = userDto.DisplayName;
+    if (userDto.Phone != null) updates['Phone'] = userDto.Phone;
+    if (userDto.Address != null) updates['Address'] = userDto.Address;
+    if (userDto.DateOfBirth != null) updates['DateOfBirth'] = userDto.DateOfBirth;
     return updates;
   }
 
@@ -172,6 +208,48 @@ export class UserService {
     else {
       throw new UnauthorizedException('Permission Denied');
     }
+  }
+
+  async updateCurrentUser(dto: UpdateProfileDto, loggedInUserInfo: User): Promise<CommandResponse> {
+    const response = new CommandResponse();
+    const existingUser = await this.userModel.findOne({ _id: loggedInUserInfo._id });
+    if (!existingUser) {
+      throw new BadRequestException('User not found');
+    }
+
+    const updateModel = this.createProfileUpdateObject(dto);
+    await this.userModel.findByIdAndUpdate(loggedInUserInfo._id, updateModel, {
+      new: true,
+      runValidators: true,
+    });
+
+    return response;
+  }
+
+  async changePassword(dto: ChangePasswordDto, loggedInUserInfo: User): Promise<CommandResponse> {
+    const response = new CommandResponse();
+    const existingUser = await this.userModel.findOne({ _id: loggedInUserInfo._id });
+    if (!existingUser) {
+      throw new BadRequestException('User not found');
+    }
+
+    const isPasswordMatched = await bcrypt.compare(dto.CurrentPassword, existingUser.Password);
+    if (!isPasswordMatched) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    const isSamePassword = await bcrypt.compare(dto.NewPassword, existingUser.Password);
+    if (isSamePassword) {
+      throw new BadRequestException('New password must be different from current password');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.NewPassword, 10);
+    await this.userModel.findByIdAndUpdate(loggedInUserInfo._id, { Password: hashedPassword }, {
+      new: true,
+      runValidators: true,
+    });
+
+    return response;
   }
 
   async deleteById(id: string, loggedInUserInfo: User): Promise<CommandResponse> {

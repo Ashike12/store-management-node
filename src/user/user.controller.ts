@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
   HttpCode,
   Param,
@@ -20,6 +19,8 @@ import { CommandResponse } from '../shared/response/command.response';
 import { QueryRespone } from '../shared/response/query.response';
 import { GetByEmailDto } from './dto/getByEmail.dto';
 import { DeleteUserDto } from './dto/deleteuser.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Controller('user')
 export class UserController {
@@ -31,6 +32,14 @@ export class UserController {
   async getAllUser(@Query() query: ExpressQuery, @Req() req): Promise<QueryRespone> {
     var userInfo = req['user'];
     return this.userService.findAll(query, userInfo);
+  }
+
+  @Get('me')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  async getCurrentUser(@Req() req): Promise<QueryRespone> {
+    var userInfo = req['user'];
+    return this.userService.getCurrentUser(userInfo);
   }
   
   @Get('getById/:id')
@@ -75,6 +84,32 @@ export class UserController {
   ): Promise<CommandResponse> {
     var userInfo = req['user'];
     return this.userService.updateById(user, userInfo);
+  }
+
+  @Post('update-profile')
+  @Post('updateProfile')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  async updateCurrentUser(
+    @Body()
+    user: UpdateProfileDto,
+    @Req() req,
+  ): Promise<CommandResponse> {
+    var userInfo = req['user'];
+    return this.userService.updateCurrentUser(user, userInfo);
+  }
+
+  @Post('change-password')
+  @Post('changePassword')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  async changePassword(
+    @Body()
+    payload: ChangePasswordDto,
+    @Req() req,
+  ): Promise<CommandResponse> {
+    var userInfo = req['user'];
+    return this.userService.changePassword(payload, userInfo);
   }
 
   @Post('delete')

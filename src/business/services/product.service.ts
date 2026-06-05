@@ -179,6 +179,15 @@ export class ProductService {
       }
     }
 
+    if (dto.SearchTerm) {
+      const escapedSearchTerm = dto.SearchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchRegex = new RegExp(escapedSearchTerm, 'i');
+      mongoQuery.$or = [
+        { ProductName: searchRegex },
+        { Description: searchRegex },
+      ];
+    }
+
     const datas = await this.productModel
       .find(mongoQuery)
       .limit(resPerPage)
