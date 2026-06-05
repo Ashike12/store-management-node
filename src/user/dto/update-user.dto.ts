@@ -13,6 +13,7 @@ export class UpdateUserDto {
   readonly LastName: string;
   readonly DisplayName: string;
   readonly Email: string;
+  readonly Phone: string;
   readonly DateOfBirth: Date;
   readonly NRIC: string;
   readonly Address: string;

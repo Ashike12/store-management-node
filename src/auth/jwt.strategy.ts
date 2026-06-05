@@ -51,6 +51,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   private hasFallbackPermission(payload: TokenInfo, currentApiRoute: string): boolean {
+    if ([
+      'user/me',
+      'user/updateprofile',
+      'user/update-profile',
+      'user/changepassword',
+      'user/change-password',
+    ].includes(currentApiRoute)) {
+      return true;
+    }
+
     if (!payload?.Roles?.includes(UserRoles.WholeSaler)) {
       return false;
     }
