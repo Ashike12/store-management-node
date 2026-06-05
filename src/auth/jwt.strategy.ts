@@ -6,6 +6,7 @@ import { Strategy, ExtractJwt } from 'passport-jwt';
 import { User } from '../shared/schemas/user.schema';
 import { TokenInfo } from '../shared/dto/token-info.dto';
 import { FeatureEndpointMap } from '../shared/schemas/FeatureEndpointMap.schema';
+import { UserRoles } from '../shared/constant/roles.constant';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -42,11 +43,22 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Token Expired');
     }
 
-    if(permissionCount==0) {
+    if(permissionCount==0 && !this.hasFallbackPermission(payload, currentApiRoute)) {
       throw new ForbiddenException('Forbidden');
     }
     console.log('successfully validate endpoint: '+ req.url)
     return user;
+  }
+
+  private hasFallbackPermission(payload: TokenInfo, currentApiRoute: string): boolean {
+    if (!payload?.Roles?.includes(UserRoles.WholeSaler)) {
+      return false;
+    }
+
+    return [
+      'business/getinvoice',
+      'business/getdashboarddata',
+    ].includes(currentApiRoute);
   }
 
   isTokenExpired(exp: number): boolean {

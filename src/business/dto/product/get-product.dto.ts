@@ -19,4 +19,8 @@ export class GetProductDto {
   @IsOptional()
   @IsNumber()
   readonly MaxMakingPrice: number;
+
+  @IsOptional()
+  @IsString()
+  readonly SearchTerm: string;
 }
