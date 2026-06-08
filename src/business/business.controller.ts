@@ -16,12 +16,15 @@ import { AddProductionDto } from './dto/product/add-production.dto';
 import { Request } from 'express';
 import { User } from '../shared/schemas/user.schema';
 import { UserRoles } from '../shared/constant/roles.constant';
+import { CreateClientOrderDto } from './dto/client-order/create-client-order.dto';
+import { ClientOrderService } from './services/client-order.service';
 
 @Controller('business')
 export class BusinessController {
 
   constructor(private productService: ProductService,
-    private invoiceService: InvoiceService
+    private invoiceService: InvoiceService,
+    private clientOrderService: ClientOrderService
   ) {
   }
 
@@ -46,6 +49,14 @@ export class BusinessController {
   GetClientProducts(@Query() query: ExpressQuery,
     @Body() dto: GetProductDto): Promise<QueryRespone> {
     return this.productService.getClientProduct(query, dto);
+  }
+
+  @Post('CreateClientOrder')
+  @HttpCode(200)
+  CreateClientOrder(@Body() dto: CreateClientOrderDto,
+    @Req() req: Request): Promise<CommandResponse> {
+    const customerIp = req.ip || req.socket?.remoteAddress;
+    return this.clientOrderService.createOrder(dto, customerIp);
   }
 
   @Post('CreateProduct')
