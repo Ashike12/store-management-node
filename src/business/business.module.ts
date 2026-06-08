@@ -7,8 +7,10 @@ import { UserSchema } from '../shared/schemas/user.schema';
 import { ProductSchema } from '../shared/schemas/product.schema';
 import { ProductSellSchema } from '../shared/schemas/productSell.schema';
 import { InvoiceSchema } from '../shared/schemas/invoice.schema';
+import { OrderSchema } from '../shared/schemas/order.schema';
 import { ProductService } from './services/product.service';
 import { InvoiceService } from './services/invoice.service';
+import { ClientOrderService } from './services/client-order.service';
 
 @Module({
   imports: [
@@ -17,10 +19,11 @@ import { InvoiceService } from './services/invoice.service';
       { name: 'User', schema: UserSchema },
       { name: 'Product', schema: ProductSchema },
       { name: 'ProductSell', schema: ProductSellSchema },
-      { name: 'Invoice', schema: InvoiceSchema }
+      { name: 'Invoice', schema: InvoiceSchema },
+      { name: 'Order', schema: OrderSchema }
     ]),
   ],
   controllers: [BusinessController],
-  providers: [SharedService, ProductService, InvoiceService],
+  providers: [SharedService, ProductService, InvoiceService, ClientOrderService],
 })
 export class BusinessModule {}
