@@ -1,14 +1,10 @@
-
-import {
-  IsNotEmpty,
-  IsString,
-} from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
 
 export class UpdateUserDto {
   @IsNotEmpty()
   @IsString()
   readonly ItemId: string;
-  
+
   readonly FirstName: string;
   readonly LastName: string;
   readonly DisplayName: string;

@@ -25,6 +25,6 @@ export class UpdateProductDto {
   readonly EndUserDiscountedPrice: number;
 
   Quantity: number;
-  
+
   readonly Description: string;
 }

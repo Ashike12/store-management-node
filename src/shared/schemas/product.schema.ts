@@ -37,7 +37,6 @@ export class Product extends RootSchema {
 
   @Prop()
   Quantity: number;
-
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);

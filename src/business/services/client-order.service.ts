@@ -8,7 +8,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
 import { CommandResponse } from '../../shared/response/command.response';
 import { SharedService } from '../../services/shared.service';
-import { CreateClientOrderDto, CreateClientOrderItemDto } from '../dto/client-order/create-client-order.dto';
+import {
+  CreateClientOrderDto,
+  CreateClientOrderItemDto,
+} from '../dto/client-order/create-client-order.dto';
 import { Order } from '../../shared/schemas/order.schema';
 import { Product } from '../../shared/schemas/product.schema';
 import { UserRoles } from '../../shared/constant/roles.constant';
@@ -32,16 +35,28 @@ export class ClientOrderService {
     private readonly sharedService: SharedService,
     private readonly configService: ConfigService,
     @InjectModel('Order') private readonly orderModel: mongoose.Model<Order>,
-    @InjectModel('Product') private readonly productModel: mongoose.Model<Product>,
+    @InjectModel('Product')
+    private readonly productModel: mongoose.Model<Product>,
   ) {}
 
-  async createOrder(dto: CreateClientOrderDto, customerIp?: string): Promise<CommandResponse> {
-    const verifiedCaptcha = await this.verifyCaptcha(dto.CaptchaToken, customerIp);
+  async createOrder(
+    dto: CreateClientOrderDto,
+    customerIp?: string,
+  ): Promise<CommandResponse> {
+    const verifiedCaptcha = await this.verifyCaptcha(
+      dto.CaptchaToken,
+      customerIp,
+    );
     const normalizedItems = await this.normalizeItems(dto.Items);
-    const subtotal = normalizedItems.reduce((sum, item) => sum + item.UnitPrice * item.Quantity, 0);
+    const subtotal = normalizedItems.reduce(
+      (sum, item) => sum + item.UnitPrice * item.Quantity,
+      0,
+    );
     const shippingCost = dto.DeliveryZone === 'inside_dhaka' ? 80 : 150;
-    const division = dto.DeliveryZone === 'inside_dhaka' ? 'Dhaka' : dto.Division.trim();
-    const district = dto.DeliveryZone === 'inside_dhaka' ? 'Dhaka' : dto.District.trim();
+    const division =
+      dto.DeliveryZone === 'inside_dhaka' ? 'Dhaka' : dto.Division.trim();
+    const district =
+      dto.DeliveryZone === 'inside_dhaka' ? 'Dhaka' : dto.District.trim();
     const couponCode = dto.CouponCode?.trim().toUpperCase() || '';
     const couponDiscount = this.getCouponDiscount(couponCode, subtotal);
     const totalAmount = Math.max(subtotal - couponDiscount + shippingCost, 0);
@@ -88,16 +103,22 @@ export class ClientOrderService {
   }
 
   private async normalizeItems(items: CreateClientOrderItemDto[]) {
-    const catalogItems = items.filter((item) => !item.ProductId.startsWith('custom-'));
+    const catalogItems = items.filter(
+      (item) => !item.ProductId.startsWith('custom-'),
+    );
     const catalogIds = catalogItems.map((item) => item.ProductId);
     const products = catalogIds.length
       ? await this.productModel.find({ _id: { $in: catalogIds } })
       : [];
-    const productsById = new Map(products.map((product) => [String(product._id), product]));
+    const productsById = new Map(
+      products.map((product) => [String(product._id), product]),
+    );
 
     return items.map((item) => {
       if (!Number.isFinite(item.Quantity) || item.Quantity <= 0) {
-        throw new BadRequestException(`Invalid quantity for product ${item.ProductName}`);
+        throw new BadRequestException(
+          `Invalid quantity for product ${item.ProductName}`,
+        );
       }
 
       if (item.ProductId.startsWith('custom-')) {
@@ -118,7 +139,10 @@ export class ClientOrderService {
         throw new BadRequestException(`Product not found: ${item.ProductName}`);
       }
 
-      const unitPrice = product.EndUserDiscountedPrice || product.EndUserPrice || item.UnitPrice;
+      const unitPrice =
+        product.EndUserDiscountedPrice ||
+        product.EndUserPrice ||
+        item.UnitPrice;
       return {
         ProductId: item.ProductId,
         ProductName: product.ProductName,
@@ -149,10 +173,17 @@ export class ClientOrderService {
     return coupon.discount;
   }
 
-  private async verifyCaptcha(token: string, customerIp?: string): Promise<VerifiedCaptcha> {
-    const secret = this.configService.get<string>('GOOGLE_RECAPTCHA_SECRET_KEY');
+  private async verifyCaptcha(
+    token: string,
+    customerIp?: string,
+  ): Promise<VerifiedCaptcha> {
+    const secret = this.configService.get<string>(
+      'GOOGLE_RECAPTCHA_SECRET_KEY',
+    );
     if (!secret) {
-      throw new ServiceUnavailableException('Google reCAPTCHA is not configured');
+      throw new ServiceUnavailableException(
+        'Google reCAPTCHA is not configured',
+      );
     }
 
     const verifyUrl =
@@ -177,7 +208,9 @@ export class ClientOrderService {
     });
 
     if (!captchaResponse.ok) {
-      throw new ServiceUnavailableException('Unable to verify captcha at the moment');
+      throw new ServiceUnavailableException(
+        'Unable to verify captcha at the moment',
+      );
     }
 
     const data = (await captchaResponse.json()) as {

@@ -29,8 +29,11 @@ export class UserController {
   @Get('get')
   @HttpCode(200)
   @UseGuards(AuthGuard())
-  async getAllUser(@Query() query: ExpressQuery, @Req() req): Promise<QueryRespone> {
-    var userInfo = req['user'];
+  async getAllUser(
+    @Query() query: ExpressQuery,
+    @Req() req,
+  ): Promise<QueryRespone> {
+    const userInfo = req['user'];
     return this.userService.findAll(query, userInfo);
   }
 
@@ -38,10 +41,10 @@ export class UserController {
   @HttpCode(200)
   @UseGuards(AuthGuard())
   async getCurrentUser(@Req() req): Promise<QueryRespone> {
-    var userInfo = req['user'];
+    const userInfo = req['user'];
     return this.userService.getCurrentUser(userInfo);
   }
-  
+
   @Get('getById/:id')
   @HttpCode(200)
   //@UseGuards(AuthGuard())
@@ -55,9 +58,9 @@ export class UserController {
   async getByEmail(
     @Body()
     dto: GetByEmailDto,
-    @Req() req
+    @Req() req,
   ): Promise<QueryRespone> {
-    var userInfo = req['user'];
+    const userInfo = req['user'];
     return this.userService.findByEmail(dto.Email, userInfo);
   }
 
@@ -69,10 +72,9 @@ export class UserController {
     userDto: CreateUserDto,
     @Req() req,
   ): Promise<CommandResponse> {
-    var userInfo = req['user'];
+    const userInfo = req['user'];
     return this.userService.createCustomer(userDto, userInfo);
   }
-
 
   @Post('update')
   @HttpCode(200)
@@ -82,7 +84,7 @@ export class UserController {
     user: UpdateUserDto,
     @Req() req,
   ): Promise<CommandResponse> {
-    var userInfo = req['user'];
+    const userInfo = req['user'];
     return this.userService.updateById(user, userInfo);
   }
 
@@ -95,7 +97,7 @@ export class UserController {
     user: UpdateProfileDto,
     @Req() req,
   ): Promise<CommandResponse> {
-    var userInfo = req['user'];
+    const userInfo = req['user'];
     return this.userService.updateCurrentUser(user, userInfo);
   }
 
@@ -108,7 +110,7 @@ export class UserController {
     payload: ChangePasswordDto,
     @Req() req,
   ): Promise<CommandResponse> {
-    var userInfo = req['user'];
+    const userInfo = req['user'];
     return this.userService.changePassword(payload, userInfo);
   }
 
@@ -120,7 +122,7 @@ export class UserController {
     deleteUser: DeleteUserDto,
     @Req() req,
   ): Promise<CommandResponse> {
-    var userInfo = req['user'];
+    const userInfo = req['user'];
     return this.userService.deleteById(deleteUser.ItemId, userInfo);
   }
 }

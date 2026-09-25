@@ -29,11 +29,11 @@ import { UserLoginLogSchema } from '../shared/schemas/userloginlog.schema';
     MongooseModule.forFeature([
       { name: 'User', schema: UserSchema },
       { name: 'UserLoginLog', schema: UserLoginLogSchema },
-      { name: 'FeatureEndpointMap', schema: FeatureEndpointMapSchema }
+      { name: 'FeatureEndpointMap', schema: FeatureEndpointMapSchema },
     ]),
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, SharedService, RedisHelperService],
-  exports: [JwtStrategy, PassportModule],
+  exports: [JwtStrategy, PassportModule, RedisHelperService],
 })
 export class AuthModule {}

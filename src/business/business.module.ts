@@ -20,10 +20,15 @@ import { ClientOrderService } from './services/client-order.service';
       { name: 'Product', schema: ProductSchema },
       { name: 'ProductSell', schema: ProductSellSchema },
       { name: 'Invoice', schema: InvoiceSchema },
-      { name: 'Order', schema: OrderSchema }
+      { name: 'Order', schema: OrderSchema },
     ]),
   ],
   controllers: [BusinessController],
-  providers: [SharedService, ProductService, InvoiceService, ClientOrderService],
+  providers: [
+    SharedService,
+    ProductService,
+    InvoiceService,
+    ClientOrderService,
+  ],
 })
 export class BusinessModule {}

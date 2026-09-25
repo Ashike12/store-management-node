@@ -5,7 +5,6 @@ import { RootSchema } from './root.schema';
   timestamps: true,
 })
 export class User extends RootSchema {
-
   @Prop()
   FirstName: string;
 
@@ -47,7 +46,6 @@ export class User extends RootSchema {
 
   @Prop()
   Address: string;
-
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

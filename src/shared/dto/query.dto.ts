@@ -1,4 +1,4 @@
 export class QueryDtoBase {
-    readonly pageSize?: number;
-    readonly pageNumber?: number;
+  readonly pageSize?: number;
+  readonly pageNumber?: number;
 }

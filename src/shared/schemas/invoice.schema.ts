@@ -25,7 +25,6 @@ export class Invoice extends RootSchema {
 
   @Prop()
   InvoiceType: string;
-
 }
 
 export const InvoiceSchema = SchemaFactory.createForClass(Invoice);

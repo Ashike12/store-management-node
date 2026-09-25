@@ -1,4 +1,13 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { SignUpDto } from './dto/signup.dto';
@@ -23,15 +32,18 @@ export class AuthController {
 
   @Post('/token')
   @HttpCode(200)
-  login(@Body() loginDto: LoginDto): Promise<{ login_token: string, refresh_token: string }> {
-    if(loginDto.GrantType == 'password') {
+  login(
+    @Body() loginDto: LoginDto,
+  ): Promise<{ login_token: string; refresh_token: string }> {
+    if (loginDto.GrantType == 'password') {
       return this.authService.login(loginDto);
-    } 
-    else if(loginDto.GrantType == 'authenticate_site') {
+    } else if (loginDto.GrantType == 'authenticate_site') {
       //ToDo will return an annonymous token
       return this.authService.getAnonymousToken();
     }
-    throw new BadRequestException("GrantType invalid, it can be either 'password' or 'authenticate_site'");
+    throw new BadRequestException(
+      "GrantType invalid, it can be either 'password' or 'authenticate_site'",
+    );
   }
 
   @Post('/refresh')
@@ -44,7 +56,7 @@ export class AuthController {
   @Post('/setPassword')
   @HttpCode(200)
   setPassword(@Body() dto: SetPasswordDto): Promise<CommandResponse> {
-    return this.authService.setPassword(dto);;
+    return this.authService.setPassword(dto);
   }
 
   // @Post('/getloginlog')
@@ -57,9 +69,11 @@ export class AuthController {
   @Post('/getloginlog')
   @HttpCode(200)
   @UseGuards(AuthGuard())
-  login1(@Body() dto: GetLoginLogsDto, @Req() req: Request): Promise<QueryRespone> {
-    var userInfo: User = <User>req['user'];
-    return this.authService.getLoginLog(dto,userInfo);
+  login1(
+    @Body() dto: GetLoginLogsDto,
+    @Req() req: Request,
+  ): Promise<QueryRespone> {
+    const userInfo: User = <User>req['user'];
+    return this.authService.getLoginLog(dto, userInfo);
   }
-
 }

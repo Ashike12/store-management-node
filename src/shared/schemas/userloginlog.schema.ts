@@ -5,7 +5,6 @@ import { RootSchema } from './root.schema';
   timestamps: true,
 })
 export class UserLoginLog extends RootSchema {
-
   @Prop()
   UserId: string;
 

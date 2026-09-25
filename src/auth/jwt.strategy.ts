@@ -1,4 +1,8 @@
-import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { PassportStrategy } from '@nestjs/passport';
 import { Model } from 'mongoose';
@@ -24,15 +28,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(req: Request, payload: TokenInfo) {
-
-    const user = await this.userModel.findOne({_id: payload.UserId});
+    const user = await this.userModel.findOne({ _id: payload.UserId });
     let currentApiRoute = req.url.toLowerCase().substring(1);
     // console.log(currentApiRoute);
-    if(currentApiRoute.indexOf('?') > -1) {
+    if (currentApiRoute.indexOf('?') > -1) {
       currentApiRoute = currentApiRoute.split('?')[0];
     }
-    const permissionCount = await this.endPointModel.countDocuments({RoleName:{$in:payload.Roles}, 
-      APIToAccess:{$regex: new RegExp(currentApiRoute, 'i')}});
+    const permissionCount = await this.endPointModel.countDocuments({
+      RoleName: { $in: payload.Roles },
+      APIToAccess: { $regex: new RegExp(currentApiRoute, 'i') },
+    });
 
     if (!user) {
       console.log('inside unauthorised section');
@@ -43,21 +48,29 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Token Expired');
     }
 
-    if(permissionCount==0 && !this.hasFallbackPermission(payload, currentApiRoute)) {
+    if (
+      permissionCount == 0 &&
+      !this.hasFallbackPermission(payload, currentApiRoute)
+    ) {
       throw new ForbiddenException('Forbidden');
     }
-    console.log('successfully validate endpoint: '+ req.url)
+    console.log('successfully validate endpoint: ' + req.url);
     return user;
   }
 
-  private hasFallbackPermission(payload: TokenInfo, currentApiRoute: string): boolean {
-    if ([
-      'user/me',
-      'user/updateprofile',
-      'user/update-profile',
-      'user/changepassword',
-      'user/change-password',
-    ].includes(currentApiRoute)) {
+  private hasFallbackPermission(
+    payload: TokenInfo,
+    currentApiRoute: string,
+  ): boolean {
+    if (
+      [
+        'user/me',
+        'user/updateprofile',
+        'user/update-profile',
+        'user/changepassword',
+        'user/change-password',
+      ].includes(currentApiRoute)
+    ) {
       return true;
     }
 
@@ -65,10 +78,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       return false;
     }
 
-    return [
-      'business/getinvoice',
-      'business/getdashboarddata',
-    ].includes(currentApiRoute);
+    return ['business/getinvoice', 'business/getdashboarddata'].includes(
+      currentApiRoute,
+    );
   }
 
   isTokenExpired(exp: number): boolean {

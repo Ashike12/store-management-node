@@ -1,7 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-} from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import * as mongoose from 'mongoose';
 import { InjectModel } from '@nestjs/mongoose';
 import { Query } from 'express-serve-static-core';
@@ -35,14 +32,16 @@ export class InvoiceService {
     private userModel: mongoose.Model<User>,
     private sharedService: SharedService,
     private productService: ProductService,
-  ) {
-  }
+  ) {}
 
   private isWholesalerUser(user?: User | null): boolean {
     return !!user?.Roles?.includes(UserRoles.WholeSaler);
   }
 
-  private getInvoiceAccessQuery(user?: User | null, baseQuery: Record<string, any> = {}): Record<string, any> {
+  private getInvoiceAccessQuery(
+    user?: User | null,
+    baseQuery: Record<string, any> = {},
+  ): Record<string, any> {
     if (!this.isWholesalerUser(user)) {
       return baseQuery;
     }
@@ -53,7 +52,10 @@ export class InvoiceService {
     };
   }
 
-  private getProductSellAccessQuery(user?: User | null, baseQuery: Record<string, any> = {}): Record<string, any> {
+  private getProductSellAccessQuery(
+    user?: User | null,
+    baseQuery: Record<string, any> = {},
+  ): Record<string, any> {
     if (!this.isWholesalerUser(user)) {
       return baseQuery;
     }
@@ -64,7 +66,10 @@ export class InvoiceService {
     };
   }
 
-  private sanitizeInvoiceForWholesaler<T extends Record<string, any>>(invoice: T, user?: User | null): T {
+  private sanitizeInvoiceForWholesaler<T extends Record<string, any>>(
+    invoice: T,
+    user?: User | null,
+  ): T {
     if (!this.isWholesalerUser(user)) {
       return invoice;
     }
@@ -73,7 +78,10 @@ export class InvoiceService {
     return safeInvoice as T;
   }
 
-  private sanitizeDashboardForWholesaler(responseData: Record<string, any>, user?: User | null) {
+  private sanitizeDashboardForWholesaler(
+    responseData: Record<string, any>,
+    user?: User | null,
+  ) {
     if (!this.isWholesalerUser(user)) {
       return responseData;
     }
@@ -81,24 +89,30 @@ export class InvoiceService {
     return {
       ThisMonthTotalInvoice: responseData.ThisMonthTotalInvoice,
       TotalDueAmount: responseData.TotalDueAmount,
-      RecentInvoiceData: (responseData.RecentInvoiceData || []).map((invoice: Record<string, any>) =>
-        this.sanitizeInvoiceForWholesaler(invoice, user),
+      RecentInvoiceData: (responseData.RecentInvoiceData || []).map(
+        (invoice: Record<string, any>) =>
+          this.sanitizeInvoiceForWholesaler(invoice, user),
       ),
     };
   }
 
   async createInvoice(dto: CreateInvoiceDto): Promise<CommandResponse> {
     const response = new CommandResponse();
-    const isDuePaymentInvoice = dto.InvoiceType === INVOICE_CONSTANT.DUE_PAYMENT;
+    const isDuePaymentInvoice =
+      dto.InvoiceType === INVOICE_CONSTANT.DUE_PAYMENT;
     const isProductInvoice = dto.InvoiceType !== INVOICE_CONSTANT.DUE_PAYMENT;
     const productSellData = dto.ProductSellInfo || [];
 
     if (isProductInvoice && productSellData.length === 0) {
-      throw new BadRequestException('At least one product is required for product invoice');
+      throw new BadRequestException(
+        'At least one product is required for product invoice',
+      );
     }
 
     if (isDuePaymentInvoice && !dto.WholeSalerId) {
-      throw new BadRequestException('Wholesaler is required for due payment invoice');
+      throw new BadRequestException(
+        'Wholesaler is required for due payment invoice',
+      );
     }
 
     let wholesalerInfo: User | null = null;
@@ -119,17 +133,23 @@ export class InvoiceService {
     const invoiceId = this.sharedService.getUid();
     const invoiceNumberPrefix = isDuePaymentInvoice
       ? 'DP'
-      : (((wholesalerInfo && wholesalerInfo.FirstName[0]) ?? "X") + ((wholesalerInfo && wholesalerInfo.LastName[0]) ?? "Y"));
+      : ((wholesalerInfo && wholesalerInfo.FirstName[0]) ?? 'X') +
+        ((wholesalerInfo && wholesalerInfo.LastName[0]) ?? 'Y');
     const invoiceNumber = `${invoiceNumberPrefix}${new Date().getTime()}`;
 
     for (const eachSell of productSellData) {
-      const productInfo = await this.productModel.findOne({ _id: eachSell.ProductId });
+      const productInfo = await this.productModel.findOne({
+        _id: eachSell.ProductId,
+      });
       if (!productInfo) {
-        throw new BadRequestException(`Product not found: ${eachSell.ProductId}`);
+        throw new BadRequestException(
+          `Product not found: ${eachSell.ProductId}`,
+        );
       }
-      const currentProductSellAMount = eachSell.SellingPrice * eachSell.Quantity;
+      const currentProductSellAMount =
+        eachSell.SellingPrice * eachSell.Quantity;
       TotalSellAmount += currentProductSellAMount;
-      TotalCostAmount += (productInfo.MakingPrice * eachSell.Quantity);
+      TotalCostAmount += productInfo.MakingPrice * eachSell.Quantity;
       sellModels.push({
         _id: this.sharedService.getUid(),
         ProductId: eachSell.ProductId,
@@ -140,11 +160,11 @@ export class InvoiceService {
         WholeSalerName: (wholesalerInfo && wholesalerInfo?.DisplayName) ?? '',
         InvoiceId: invoiceId,
         IdsAllowedToRead: dto.WholeSalerId ? [dto.WholeSalerId] : [],
-        CreatedDate: new Date().toISOString()
+        CreatedDate: new Date().toISOString(),
       });
       const updateProductDto = {
         ItemId: eachSell.ProductId,
-        Quantity: productInfo.Quantity - eachSell.Quantity
+        Quantity: productInfo.Quantity - eachSell.Quantity,
       } as UpdateProductDto;
       await this.productService.updateProduct(updateProductDto);
     }
@@ -152,14 +172,16 @@ export class InvoiceService {
       _id: invoiceId,
       TotalAmount: isDuePaymentInvoice ? dto.PaymentAmount : TotalSellAmount,
       PaymentAmount: dto.PaymentAmount,
-      ProfitMargin: isDuePaymentInvoice ? dto.PaymentAmount : (dto.PaymentAmount - TotalCostAmount),
+      ProfitMargin: isDuePaymentInvoice
+        ? dto.PaymentAmount
+        : dto.PaymentAmount - TotalCostAmount,
       WholeSalerId: dto.WholeSalerId,
       WholeSalerName: (wholesalerInfo && wholesalerInfo?.DisplayName) ?? '',
       InvoiceType: dto.InvoiceType,
       InvoiceNumber: invoiceNumber,
       IdsAllowedToRead: dto.WholeSalerId ? [dto.WholeSalerId] : [],
-      CreatedDate: new Date().toISOString()
-    }
+      CreatedDate: new Date().toISOString(),
+    };
     if (sellModels.length > 0) {
       await this.productSellModel.insertMany(sellModels);
     }
@@ -167,7 +189,11 @@ export class InvoiceService {
     return response;
   }
 
-  async getInvoiceList(query: Query, dto: GetInvoiceDto, loggedInUser?: User): Promise<QueryRespone> {
+  async getInvoiceList(
+    query: Query,
+    dto: GetInvoiceDto,
+    loggedInUser?: User,
+  ): Promise<QueryRespone> {
     const response = new QueryRespone();
     const resPerPage = Number(query.size) ?? 10000;
     const currentPage = Number(query.page) || 1;
@@ -186,23 +212,28 @@ export class InvoiceService {
       .sort({ CreatedDate: -1 })
       .limit(resPerPage)
       .skip(skip);
-    const dataCount = await this.invoiceModel
-      .countDocuments(mongoQuery);
+    const dataCount = await this.invoiceModel.countDocuments(mongoQuery);
 
     const responseCompanies = [];
-    datas.forEach(x => {
+    datas.forEach((x) => {
       const normalizedInvoice = this.normalizeInvoiceAmounts(x.toObject());
-      responseCompanies.push(this.sanitizeInvoiceForWholesaler({
-        ItemId: normalizedInvoice._id,
-        InvoiceNumber: normalizedInvoice.InvoiceNumber,
-        PaymentAmount: normalizedInvoice.PaymentAmount,
-        ProfitMargin: normalizedInvoice.ProfitMargin,
-        TotalAmount: normalizedInvoice.TotalAmount,
-        WholeSalerId: normalizedInvoice.WholeSalerId,
-        InvoiceType: normalizedInvoice.InvoiceType ?? INVOICE_CONSTANT.WHOLESALE,
-        WholeSalerName: normalizedInvoice.WholeSalerName,
-        CreatedDate: normalizedInvoice.CreatedDate
-      }, loggedInUser));
+      responseCompanies.push(
+        this.sanitizeInvoiceForWholesaler(
+          {
+            ItemId: normalizedInvoice._id,
+            InvoiceNumber: normalizedInvoice.InvoiceNumber,
+            PaymentAmount: normalizedInvoice.PaymentAmount,
+            ProfitMargin: normalizedInvoice.ProfitMargin,
+            TotalAmount: normalizedInvoice.TotalAmount,
+            WholeSalerId: normalizedInvoice.WholeSalerId,
+            InvoiceType:
+              normalizedInvoice.InvoiceType ?? INVOICE_CONSTANT.WHOLESALE,
+            WholeSalerName: normalizedInvoice.WholeSalerName,
+            CreatedDate: normalizedInvoice.CreatedDate,
+          },
+          loggedInUser,
+        ),
+      );
     });
     if (!!dto.ItemId) {
       return await this.getInvoiceByIdResponse(responseCompanies, loggedInUser);
@@ -211,15 +242,20 @@ export class InvoiceService {
     return response;
   }
 
-  private async getInvoiceByIdResponse(data: any[], loggedInUser?: User): Promise<QueryRespone> {
+  private async getInvoiceByIdResponse(
+    data: any[],
+    loggedInUser?: User,
+  ): Promise<QueryRespone> {
     const response = new QueryRespone();
     if (data.length !== 1) {
       throw new BadRequestException('Data not found or multiple data exists');
     }
     const invoiceDetails = data[0];
     invoiceDetails.ProductSellInfo = [];
-    const datas = await this.productSellModel.find({ InvoiceId: invoiceDetails.ItemId });
-    datas.forEach(x => {
+    const datas = await this.productSellModel.find({
+      InvoiceId: invoiceDetails.ItemId,
+    });
+    datas.forEach((x) => {
       invoiceDetails.ProductSellInfo.push({
         ItemId: x._id,
         InvoiceId: x.InvoiceId,
@@ -229,10 +265,13 @@ export class InvoiceService {
         ProductName: x.ProductName,
         Quantity: x.Quantity,
         WholeSalerId: x.WholeSalerId,
-        WholeSalerName: x.WholeSalerName
+        WholeSalerName: x.WholeSalerName,
       });
     });
-    response.setData(this.sanitizeInvoiceForWholesaler(invoiceDetails, loggedInUser), 1);
+    response.setData(
+      this.sanitizeInvoiceForWholesaler(invoiceDetails, loggedInUser),
+      1,
+    );
     return response;
   }
 
@@ -254,16 +293,21 @@ export class InvoiceService {
       throw new BadRequestException('Invoice not found');
     }
 
-    const isDuePaymentInvoice = dto.InvoiceType === INVOICE_CONSTANT.DUE_PAYMENT;
+    const isDuePaymentInvoice =
+      dto.InvoiceType === INVOICE_CONSTANT.DUE_PAYMENT;
     const isProductInvoice = dto.InvoiceType !== INVOICE_CONSTANT.DUE_PAYMENT;
     const productSellData = dto.ProductSellInfo || [];
 
     if (isProductInvoice && productSellData.length === 0) {
-      throw new BadRequestException('At least one product is required for product invoice');
+      throw new BadRequestException(
+        'At least one product is required for product invoice',
+      );
     }
 
     if (isDuePaymentInvoice && !dto.WholeSalerId) {
-      throw new BadRequestException('Wholesaler is required for due payment invoice');
+      throw new BadRequestException(
+        'Wholesaler is required for due payment invoice',
+      );
     }
 
     let wholesalerInfo: User | null = null;
@@ -283,13 +327,18 @@ export class InvoiceService {
     let TotalSellAmount = 0;
     let TotalCostAmount = 0;
     for (const eachSell of productSellData) {
-      const productInfo = await this.productModel.findOne({ _id: eachSell.ProductId });
+      const productInfo = await this.productModel.findOne({
+        _id: eachSell.ProductId,
+      });
       if (!productInfo) {
-        throw new BadRequestException(`Product not found: ${eachSell.ProductId}`);
+        throw new BadRequestException(
+          `Product not found: ${eachSell.ProductId}`,
+        );
       }
-      const currentProductSellAMount = eachSell.SellingPrice * eachSell.Quantity;
+      const currentProductSellAMount =
+        eachSell.SellingPrice * eachSell.Quantity;
       TotalSellAmount += currentProductSellAMount;
-      TotalCostAmount += (productInfo.MakingPrice * eachSell.Quantity);
+      TotalCostAmount += productInfo.MakingPrice * eachSell.Quantity;
       sellModels.push({
         _id: this.sharedService.getUid(),
         ProductId: eachSell.ProductId,
@@ -300,32 +349,44 @@ export class InvoiceService {
         WholeSalerName: (wholesalerInfo && wholesalerInfo?.DisplayName) ?? '',
         InvoiceId: existingData._id,
         IdsAllowedToRead: dto.WholeSalerId ? [dto.WholeSalerId] : [],
-        CreatedDate: new Date().toISOString()
+        CreatedDate: new Date().toISOString(),
       });
       const updateProductDto = {
         ItemId: eachSell.ProductId,
-        Quantity: productInfo.Quantity - eachSell.Quantity
+        Quantity: productInfo.Quantity - eachSell.Quantity,
       } as UpdateProductDto;
       await this.productService.updateProduct(updateProductDto);
     }
     if (sellModels.length > 0) {
       await this.productSellModel.insertMany(sellModels);
     }
-    await this.invoiceModel.findByIdAndUpdate(dto.ItemId,
-      this.createInvoiceUpdateObject(dto.PaymentAmount,
-        isDuePaymentInvoice ? dto.PaymentAmount : (dto.PaymentAmount - TotalCostAmount),
+    await this.invoiceModel.findByIdAndUpdate(
+      dto.ItemId,
+      this.createInvoiceUpdateObject(
+        dto.PaymentAmount,
+        isDuePaymentInvoice
+          ? dto.PaymentAmount
+          : dto.PaymentAmount - TotalCostAmount,
         isDuePaymentInvoice ? dto.PaymentAmount : TotalSellAmount,
         dto.InvoiceType,
         dto.WholeSalerId,
-        (wholesalerInfo && wholesalerInfo?.DisplayName) ?? ''), {
-      new: true,
-      runValidators: true,
-    });
+        (wholesalerInfo && wholesalerInfo?.DisplayName) ?? '',
+      ),
+      {
+        new: true,
+        runValidators: true,
+      },
+    );
 
     return response;
   }
 
-  private normalizeInvoiceAmounts<T extends Pick<Invoice, 'InvoiceType' | 'PaymentAmount' | 'ProfitMargin' | 'TotalAmount'>>(invoice: T): T {
+  private normalizeInvoiceAmounts<
+    T extends Pick<
+      Invoice,
+      'InvoiceType' | 'PaymentAmount' | 'ProfitMargin' | 'TotalAmount'
+    >,
+  >(invoice: T): T {
     if (invoice.InvoiceType !== INVOICE_CONSTANT.DUE_PAYMENT) {
       return invoice;
     }
@@ -338,13 +399,17 @@ export class InvoiceService {
   }
 
   private async restoreOldSells(invoiceId: string) {
-    const sellProducts = await this.productSellModel.find({ InvoiceId: invoiceId });
+    const sellProducts = await this.productSellModel.find({
+      InvoiceId: invoiceId,
+    });
     await this.productSellModel.deleteMany({ InvoiceId: invoiceId });
     for (const eachSell of sellProducts) {
-      const productInfo = await this.productModel.findOne({ _id: eachSell.ProductId });
+      const productInfo = await this.productModel.findOne({
+        _id: eachSell.ProductId,
+      });
       const updateProductDto = {
         ItemId: eachSell.ProductId,
-        Quantity: productInfo.Quantity + eachSell.Quantity // increase the old sell value
+        Quantity: productInfo.Quantity + eachSell.Quantity, // increase the old sell value
       } as UpdateProductDto;
       await this.productService.updateProduct(updateProductDto);
     }
@@ -368,21 +433,31 @@ export class InvoiceService {
     return updates;
   }
 
-  public async getDashboardStatsData(loggedInUser?: User): Promise<QueryRespone> {
+  public async getDashboardStatsData(
+    loggedInUser?: User,
+  ): Promise<QueryRespone> {
     const response = new QueryRespone();
     const invoiceFilter = this.getInvoiceAccessQuery(loggedInUser);
     const productSellFilter = this.getProductSellAccessQuery(loggedInUser);
-    const revenueGroupedByDate = await this.getRevenueGroupedByDate(invoiceFilter);
+    const revenueGroupedByDate =
+      await this.getRevenueGroupedByDate(invoiceFilter);
     const productSalesInfo = await this.getProductSalesInfo(productSellFilter);
-    const wholeSalersSalesInfo = await this.getWholeSalersSalesInfo(invoiceFilter);
-    const totalRevenueOfThisMonth = await this.getThisMonthRevenue(invoiceFilter);
+    const wholeSalersSalesInfo =
+      await this.getWholeSalersSalesInfo(invoiceFilter);
+    const totalRevenueOfThisMonth =
+      await this.getThisMonthRevenue(invoiceFilter);
     const totalInvoices = await this.invoiceModel.countDocuments(invoiceFilter);
     const totalSell = await this.getThisMonthTotalSold(productSellFilter);
     const totalDueAmount = await this.getTotalDueAmount(invoiceFilter);
-    const recentInvoiceDocs = await this.invoiceModel.find(invoiceFilter).sort({ CreatedDate: -1 }).limit(5);
-    const recentInvoiceData = recentInvoiceDocs.map(invoice => this.normalizeInvoiceAmounts(invoice.toObject()));
-    const consumerData = wholeSalersSalesInfo.find( x => x.name == '');
-    if(consumerData) {
+    const recentInvoiceDocs = await this.invoiceModel
+      .find(invoiceFilter)
+      .sort({ CreatedDate: -1 })
+      .limit(5);
+    const recentInvoiceData = recentInvoiceDocs.map((invoice) =>
+      this.normalizeInvoiceAmounts(invoice.toObject()),
+    );
+    const consumerData = wholeSalersSalesInfo.find((x) => x.name == '');
+    if (consumerData) {
       consumerData.name = 'Consumer';
     }
     const responseData = {
@@ -394,12 +469,17 @@ export class InvoiceService {
       ThisMonthTotalSell: totalSell,
       TotalDueAmount: totalDueAmount,
       RecentInvoiceData: recentInvoiceData,
-    }
-    response.setData(this.sanitizeDashboardForWholesaler(responseData, loggedInUser), 0)
+    };
+    response.setData(
+      this.sanitizeDashboardForWholesaler(responseData, loggedInUser),
+      0,
+    );
     return response;
   }
 
-  async getRevenueGroupedByDate(filter: Record<string, any> = {}): Promise<{ date: string; revenue: number }[]> {
+  async getRevenueGroupedByDate(
+    filter: Record<string, any> = {},
+  ): Promise<{ date: string; revenue: number }[]> {
     const result = await this.invoiceModel.aggregate([
       {
         $match: filter,
@@ -441,7 +521,9 @@ export class InvoiceService {
     return result;
   }
 
-  async getProductSalesInfo(filter: Record<string, any> = {}): Promise<{ name: string; sales: number }[]> {
+  async getProductSalesInfo(
+    filter: Record<string, any> = {},
+  ): Promise<{ name: string; sales: number }[]> {
     const result = await this.productSellModel.aggregate([
       {
         $match: filter,
@@ -466,7 +548,9 @@ export class InvoiceService {
     return result;
   }
 
-  async getWholeSalersSalesInfo(filter: Record<string, any> = {}): Promise<{ name: string; value: number }[]> {
+  async getWholeSalersSalesInfo(
+    filter: Record<string, any> = {},
+  ): Promise<{ name: string; value: number }[]> {
     const result = await this.invoiceModel.aggregate([
       {
         $match: filter,
@@ -538,7 +622,9 @@ export class InvoiceService {
     ]);
     return result.length > 0 ? result[0].totalRevenue : 0;
   }
-  async getThisMonthTotalSold(filter: Record<string, any> = {}): Promise<number> {
+  async getThisMonthTotalSold(
+    filter: Record<string, any> = {},
+  ): Promise<number> {
     const now = new Date();
 
     const start = startOfMonth(now);

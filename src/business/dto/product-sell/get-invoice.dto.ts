@@ -1,8 +1,4 @@
-
-import {
-  IsNotEmpty,
-  IsString,
-} from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
 
 export class GetInvoiceDto {
   @IsString()
@@ -10,4 +6,3 @@ export class GetInvoiceDto {
 
   readonly WholesalerId?: string = null;
 }
-

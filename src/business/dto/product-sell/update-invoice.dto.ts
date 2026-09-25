@@ -3,7 +3,7 @@ import { INVOICE_CONSTANT } from '../../../shared/constant/invoice.constant';
 export class UpdateInvoiceDto {
   @IsNotEmpty()
   readonly ItemId: string;
-  
+
   readonly ProductSellInfo: ProductSellDto[] = [];
 
   @IsNotEmpty()
@@ -12,7 +12,11 @@ export class UpdateInvoiceDto {
   readonly WholeSalerId: string;
 
   @IsNotEmpty()
-  @IsIn([INVOICE_CONSTANT.WHOLESALE, INVOICE_CONSTANT.CONSUMER, INVOICE_CONSTANT.DUE_PAYMENT])
+  @IsIn([
+    INVOICE_CONSTANT.WHOLESALE,
+    INVOICE_CONSTANT.CONSUMER,
+    INVOICE_CONSTANT.DUE_PAYMENT,
+  ])
   readonly InvoiceType: string = INVOICE_CONSTANT.WHOLESALE;
 }
 
