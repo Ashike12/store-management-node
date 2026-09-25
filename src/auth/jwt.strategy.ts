@@ -74,6 +74,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       return true;
     }
 
+    if (currentApiRoute === 'business/generateaisuggestion') {
+      return (
+        payload?.Roles?.includes(UserRoles.Admin) ||
+        !payload?.Roles?.includes(UserRoles.WholeSaler)
+      );
+    }
+
     if (!payload?.Roles?.includes(UserRoles.WholeSaler)) {
       return false;
     }

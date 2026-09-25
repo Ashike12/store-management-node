@@ -11,6 +11,7 @@ import { OrderSchema } from '../shared/schemas/order.schema';
 import { ProductService } from './services/product.service';
 import { InvoiceService } from './services/invoice.service';
 import { ClientOrderService } from './services/client-order.service';
+import { AiSuggestionService } from './services/ai-suggestion.service';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { ClientOrderService } from './services/client-order.service';
     ProductService,
     InvoiceService,
     ClientOrderService,
+    AiSuggestionService,
   ],
 })
 export class BusinessModule {}

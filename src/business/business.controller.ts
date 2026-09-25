@@ -28,6 +28,8 @@ import { UserRoles } from '../shared/constant/roles.constant';
 import { CreateClientOrderDto } from './dto/client-order/create-client-order.dto';
 import { ClientOrderService } from './services/client-order.service';
 import { RateLimitGuard } from '../guards/rate-limit.guard';
+import { GenerateAiSuggestionDto } from './dto/ai-suggestion/generate-ai-suggestion.dto';
+import { AiSuggestionService } from './services/ai-suggestion.service';
 
 @Controller('business')
 export class BusinessController {
@@ -35,6 +37,7 @@ export class BusinessController {
     private productService: ProductService,
     private invoiceService: InvoiceService,
     private clientOrderService: ClientOrderService,
+    private aiSuggestionService: AiSuggestionService,
   ) {}
 
   private ensureWholesalerReadOnly(user?: User) {
@@ -174,5 +177,16 @@ export class BusinessController {
   ): Promise<CommandResponse> {
     this.ensureWholesalerReadOnly(req['user'] as User);
     return this.productService.addProduction(dto);
+  }
+
+  @Post('GenerateAiSuggestion')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  GenerateAiSuggestion(
+    @Body() dto: GenerateAiSuggestionDto,
+    @Req() req: Request,
+  ): Promise<CommandResponse> {
+    this.ensureWholesalerReadOnly(req['user'] as User);
+    return this.aiSuggestionService.generateSuggestion(dto);
   }
 }
