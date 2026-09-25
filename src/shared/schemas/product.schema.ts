@@ -15,6 +15,9 @@ export class Product extends RootSchema {
   SubCategory: string;
 
   @Prop()
+  NetHeight: string;
+
+  @Prop()
   Description: string;
 
   @Prop({ type: [String], default: [] })

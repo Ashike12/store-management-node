@@ -22,6 +22,10 @@ export class CreateProductDto {
   @IsNotEmpty()
   readonly SubCategory: string;
 
+  @IsOptional()
+  @IsString()
+  readonly NetHeight: string;
+
   @IsArray()
   @IsString({ each: true })
   readonly ImageLinks: string[];

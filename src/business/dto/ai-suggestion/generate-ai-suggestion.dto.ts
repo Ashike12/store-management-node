@@ -19,4 +19,8 @@ export class GenerateAiSuggestionDto {
   @IsOptional()
   @IsString()
   readonly SubCategory?: string;
+
+  @IsOptional()
+  @IsString()
+  readonly NetHeight?: string;
 }

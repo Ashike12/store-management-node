@@ -42,6 +42,7 @@ export class ProductService {
       ProductName: dto.ProductName,
       Category: dto.Category,
       SubCategory: dto.SubCategory,
+      NetHeight: this.getNetHeightDuplicateQuery(dto.Category, dto.NetHeight),
     });
     if (existingData != null) {
       throw new BadRequestException(
@@ -55,6 +56,7 @@ export class ProductService {
       ProductName: dto.ProductName,
       Category: dto.Category,
       SubCategory: dto.SubCategory,
+      NetHeight: dto.NetHeight ?? '',
       ImageLinks: dto.ImageLinks ?? [],
       VideoLink: dto.VideoLink,
       MakingPrice: dto.MakingPrice,
@@ -77,6 +79,7 @@ export class ProductService {
     if (dto.ProductName != null) updates['ProductName'] = dto.ProductName;
     if (dto.Category != null) updates['Category'] = dto.Category;
     if (dto.SubCategory != null) updates['SubCategory'] = dto.SubCategory;
+    if (dto.NetHeight != null) updates['NetHeight'] = dto.NetHeight;
     if (dto.ImageLinks != null) updates['ImageLinks'] = dto.ImageLinks;
     if (dto.VideoLink != null) updates['VideoLink'] = dto.VideoLink;
     if (dto.MakingPrice != null) updates['MakingPrice'] = dto.MakingPrice;
@@ -104,6 +107,18 @@ export class ProductService {
         'Invalid sub category for selected category',
       );
     }
+  }
+
+  private shouldUseNetHeight(category: string): boolean {
+    return ['MosquitoNet', 'MosquitoNetYard'].includes(category);
+  }
+
+  private getNetHeightDuplicateQuery(category: string, netHeight?: string): any {
+    const normalizedHeight = this.shouldUseNetHeight(category)
+      ? (netHeight ?? '')
+      : '';
+
+    return normalizedHeight ? normalizedHeight : { $in: ['', null] };
   }
 
   async updateProduct(dto: UpdateProductDto): Promise<CommandResponse> {
@@ -234,6 +249,7 @@ export class ProductService {
       ProductName: x.ProductName,
       Category: (x as any).Category ?? '',
       SubCategory: (x as any).SubCategory ?? '',
+      NetHeight: (x as any).NetHeight ?? '',
       Description: x.Description,
       ImageLinks: imageLinks,
       VideoLink: x.VideoLink ?? '',
@@ -260,6 +276,7 @@ export class ProductService {
       ProductName: x.ProductName,
       Category: (x as any).Category ?? '',
       SubCategory: (x as any).SubCategory ?? '',
+      NetHeight: (x as any).NetHeight ?? '',
       Description: x.Description,
       ImageLinks: imageLinks,
       VideoLink: x.VideoLink ?? '',

@@ -140,6 +140,7 @@ export class AiSuggestionService {
       `Product name: ${dto.ProductName || 'Not provided'}`,
       `Category: ${dto.Category || 'Not provided'}`,
       `Sub category: ${dto.SubCategory || 'Not provided'}`,
+      `Net height: ${dto.NetHeight || 'Not provided'}`,
       `Current description: ${dto.CurrentValue || 'Not provided'}`,
     ].join('\n');
   }
