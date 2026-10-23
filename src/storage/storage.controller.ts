@@ -84,10 +84,8 @@ export class StorageController {
   //@UseGuards(AuthGuard())
   async GetFilesInfoByUser(
     @Query() query: ExpressQuery,
-    @Req() req: Request,
+    @Param('userId') userId: string,
   ): Promise<QueryRespone> {
-    const userInfo = req['user'];
-    const userId = req.params['userId'];
     return this.storageService.getAllDocsByUser(query, userId);
   }
 

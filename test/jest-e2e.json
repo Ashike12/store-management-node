@@ -1,0 +1,13 @@
+{
+  "rootDir": "../src",
+  "testEnvironment": "node",
+  "testRegex": "api\\.spec\\.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": [
+      "ts-jest",
+      {
+        "tsconfig": "<rootDir>/../tsconfig.spec.json"
+      }
+    ]
+  }
+}

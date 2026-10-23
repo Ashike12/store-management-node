@@ -228,7 +228,7 @@ export class UserService {
     if (!existingUser) {
       throw new BadRequestException('User not found');
     }
-    if (loggedInUserInfo.Roles.indexOf(UserRoles.Admin)) {
+    if (loggedInUserInfo.Roles?.includes(UserRoles.Admin)) {
       const updateModel = this.createUpdateObject(dto);
       if (dto.Password != null) {
         const hashedPassword = await bcrypt.hash(dto.Password, 10);
@@ -318,7 +318,7 @@ export class UserService {
     if (!existingUser) {
       throw new BadRequestException('User not found');
     }
-    if (loggedInUserInfo.Roles.indexOf(UserRoles.Admin)) {
+    if (loggedInUserInfo.Roles?.includes(UserRoles.Admin)) {
       await this.userModel.findByIdAndDelete(id);
       return response;
     } else {
