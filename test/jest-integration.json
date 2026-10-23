@@ -1,0 +1,6 @@
+{
+  "rootDir": "..",
+  "testRegex": ".*\\.integration\\.ts$",
+  "transform": { "^.+\\.ts$": ["ts-jest", { "tsconfig": "tsconfig.spec.json" }] },
+  "testEnvironment": "node"
+}

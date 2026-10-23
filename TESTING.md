@@ -31,7 +31,7 @@ Coverage output is ignored by Git: `coverage/lcov-report/index.html`, `coverage/
 | App (1) | GET `/` |
 | Auth (5) | POST `/auth/signup`, `/auth/token`, `/auth/refresh`, `/auth/setPassword`, `/auth/getloginlog` |
 | User (9) | GET `/user/get`, `/user/me`, `/user/getById/:id`; POST `/user/getByEmail`, `/user/createCustomer`, `/user/update`, `/user/update-profile`, `/user/change-password`, `/user/delete` |
-| Business (14) | POST `/business/QuoteBuilder`, `/business/GetProducts`, `/business/GetClientProducts`, `/business/CreateClientOrder`, `/business/CreateProduct`, `/business/UpdateProduct`, `/business/DeleteProduct`, `/business/CreateInvoice`, `/business/UpdateInvoice`, `/business/GetInvoice`, `/business/DeleteInvoice`, `/business/GetDashboardData`, `/business/AddProduction`, `/business/GenerateAiSuggestion` |
+| Business (17) | POST `/business/ListOrders`, `/business/GetOrder`, `/business/TransitionOrder`, `/business/QuoteBuilder`, `/business/GetProducts`, `/business/GetClientProducts`, `/business/CreateClientOrder`, `/business/CreateProduct`, `/business/UpdateProduct`, `/business/DeleteProduct`, `/business/CreateInvoice`, `/business/UpdateInvoice`, `/business/GetInvoice`, `/business/DeleteInvoice`, `/business/GetDashboardData`, `/business/AddProduction`, `/business/GenerateAiSuggestion` |
 | Storage (5) | POST `/storage/uploadFile`; GET `/storage/getFiles`, `/storage/getFilesByUser/:userId`, `/storage/getFile/:fileId`, `/storage/deleteFile/:fileId` |
 
 ## Focused service coverage
@@ -49,11 +49,11 @@ Coverage output is ignored by Git: `coverage/lcov-report/index.html`, `coverage/
 
 ## Recorded result
 
-`npm run test:cov -- --runInBand --silent`: 18 suites, 385 tests passed. The previous baseline was 193 tests and 61.88% line coverage.
+`npm run test:cov -- --runInBand --silent`: 19 suites, 412 tests passed. The previous baseline was 193 tests and 61.88% line coverage.
 
 | Scope | Statements | Branches | Functions | Lines |
 | --- | --- | --- | --- | --- |
-| Entire source (Nest 12 / updated tooling) | 87.24% | 85.15% | 91.71% | 87.49% |
+| Entire source (Nest 12 / updated tooling) | 83.79% | 78.04% | 88.05% | 84.08% |
 | All five controllers | 100% | Not all branches covered | 100% | 100% |
 
 Jest 30.5.2, ts-jest 29.4.15 and TypeScript 6.0.3 replace the previously incompatible transformer/compiler pairing. Test scripts now enable VM modules for Nest 12's ESM dependencies; Node 24.22.1 and 26.0.0 passed the suite. The Node VM-module experimental warning is expected. Use `npm run typecheck` for the separate no-output application type check.
@@ -92,3 +92,14 @@ Add its explicit HTTP matrix entry, valid/invalid/unauthorized cases, service be
 - Tests cover unsupported builders, malformed options, bounded integer quantity, forged totals, price changes after quoting, HTTP DTO rejection and rate-limit 429 responses. Existing direct-checkout tampering tests ensure skipping the quote cannot bypass pricing.
 - Permission seed replay is tested in memory, and its approved manual application/replay was verified against the configured database (five records in each mapping collection). No customer/order/product data was modified.
 - Contract and CLIENT-101 handoff: [BUILDER_QUOTE.md](docs/BUILDER_QUOTE.md). Client integration is not implemented in this backend task.
+
+## BE-103 / BE-104 verification
+
+- Pure mosquito-net-v1 fixture suite preserves the approved formulas and feet/inches contract.
+- Checkout request-id replay, conflicting payload and duplicate-key race tests use mocked persistence.
+- `npm run test:integration` separately passed 8 real MongoDB replica-set tests: concurrent confirmations cannot oversell; duplicate transitions do not double-deduct; partial-material failure rolls back; cancellation restores snapshots once; admin-only access, filtered pagination, lifecycle and unique request IDs are enforced.
+- Integration tests use mongodb-memory-server-core with an isolated local MongoDB 7.0.11 binary, never .env/Atlas. Their service execution is not included in the normal unit coverage percentage. See docs/UNITS_AND_ORDERS.md for commands.
+- Order endpoint permission seeds/indexes were applied and replayed separately against the configured database; no customer/order/product records were altered there.
+- Client no-output typecheck and retry-ID tests pass. Admin typecheck reports existing unrelated CustomButton/unused-variable errors; the admin change is limited to height-label strings. No production builds run.
+
+Final BE-103/104 run: 412 unit/contract tests (19 suites), 150 HTTP matrix tests via test:e2e, and 8 separate local Mongo integration tests passed. Coverage above excludes the separately executed integration suite, so order-operations service coverage is not reflected there. Backend/client no-output typechecks passed.

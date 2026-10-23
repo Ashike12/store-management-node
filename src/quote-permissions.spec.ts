@@ -39,3 +39,29 @@ describe('BE-102 permission seed', () => {
     }
   });
 });
+
+describe('BE-104 admin-only permission seeds', () => {
+  it('upserts three endpoints into both maps, admin only, plus request-id index', async () => {
+    const {
+      seedOrderOperations: seed,
+    } = require('../scripts/seed-order-operations.cjs');
+    const rows = new Map();
+    const index = jest.fn();
+    const db = {
+      collection: (name) => ({
+        createIndex: index,
+        updateOne: async (filter, update) => {
+          rows.set(name + JSON.stringify(filter), update.$set);
+        },
+      }),
+    };
+    await seed(db);
+    await seed(db);
+    expect(rows.size).toBe(6);
+    for (const row of rows.values()) expect(row.RoleName).toBe('admin');
+    expect(index).toHaveBeenCalledWith(
+      { RequestId: 1 },
+      expect.objectContaining({ unique: true }),
+    );
+  });
+});

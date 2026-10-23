@@ -1,3 +1,9 @@
+import { OrderOperationsService } from './services/order-operations.service';
+import {
+  ListOrdersDto,
+  OrderDetailsDto,
+  TransitionOrderDto,
+} from './dto/client-order/order-operations.dto';
 import {
   Controller,
   Post,
@@ -38,6 +44,7 @@ import { QuoteBuilderDto } from './dto/client-order/quote-builder.dto';
 @Controller('business')
 export class BusinessController {
   constructor(
+    private orderOperations: OrderOperationsService,
     private productService: ProductService,
     private invoiceService: InvoiceService,
     private clientOrderService: ClientOrderService,
@@ -51,6 +58,44 @@ export class BusinessController {
     ) {
       throw new ForbiddenException('Wholesaler accounts have read-only access');
     }
+  }
+
+  private ensureAdmin(user?: User) {
+    if (!user?.Roles?.includes(UserRoles.Admin))
+      throw new ForbiddenException('Admin access required');
+  }
+
+  @Post('ListOrders')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
+  ListOrders(@Body() dto: ListOrdersDto, @Req() req: Request) {
+    this.ensureAdmin(req['user'] as User);
+    return this.orderOperations.list(dto, req['user'] as User);
+  }
+
+  @Post('GetOrder')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
+  GetOrder(@Body() dto: OrderDetailsDto, @Req() req: Request) {
+    this.ensureAdmin(req['user'] as User);
+    return this.orderOperations.detail(dto.ItemId, req['user'] as User);
+  }
+
+  @Post('TransitionOrder')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
+  TransitionOrder(@Body() dto: TransitionOrderDto, @Req() req: Request) {
+    this.ensureAdmin(req['user'] as User);
+    return this.orderOperations.transition(dto, req['user'] as User);
   }
 
   @Post('GetProducts')

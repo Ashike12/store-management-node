@@ -1,3 +1,4 @@
+import { IsIn } from 'class-validator';
 import {
   IsArray,
   IsNotEmpty,
@@ -25,6 +26,10 @@ export class CreateProductDto {
   @IsOptional()
   @IsString()
   readonly NetHeight: string;
+
+  @IsOptional()
+  @IsIn(['feet'])
+  readonly NetHeightUnit?: 'feet';
 
   @IsArray()
   @IsString({ each: true })

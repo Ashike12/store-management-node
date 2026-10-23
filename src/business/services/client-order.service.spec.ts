@@ -1,10 +1,14 @@
 import { ClientOrderService } from './client-order.service';
 
 describe('ClientOrderService with mocked CAPTCHA and database', () => {
-  const orders = { create: jest.fn() };
+  const orders = {
+    create: jest.fn(),
+    findOne: jest.fn().mockResolvedValue(null),
+  };
   const products = { find: jest.fn() };
   const config = { get: jest.fn() };
   const dto = {
+    RequestId: '12345678-1234-4123-8123-123456789abc',
     CustomerName: ' Test ',
     PhoneNumber: '01700000000',
     Division: 'Other',
@@ -30,6 +34,7 @@ describe('ClientOrderService with mocked CAPTCHA and database', () => {
   let fetchMock: jest.SpyInstance;
   beforeEach(() => {
     orders.create.mockReset();
+    orders.findOne.mockReset().mockResolvedValue(null);
     products.find
       .mockReset()
       .mockResolvedValue([
@@ -56,6 +61,7 @@ describe('ClientOrderService with mocked CAPTCHA and database', () => {
     await service.createOrder(dto, '127.0.0.1');
     expect(orders.create).toHaveBeenCalledWith(
       expect.objectContaining({
+        RequestId: '12345678-1234-4123-8123-123456789abc',
         CustomerName: 'Test',
         Division: 'Dhaka',
         District: 'Dhaka',
@@ -184,4 +190,34 @@ describe('ClientOrderService with mocked CAPTCHA and database', () => {
       expect(orders.create).not.toHaveBeenCalled();
     },
   );
+
+  it('replays the same request without creating or repricing an order', async () => {
+    await service.createOrder(dto);
+    const saved = orders.create.mock.calls[0][0];
+    orders.findOne.mockResolvedValue(saved);
+    products.find.mockClear();
+    const response = await service.createOrder({
+      ...dto,
+      CaptchaToken: 'fresh-captcha',
+    });
+    expect(response.Data.OrderId).toBe(saved._id);
+    expect(orders.create).toHaveBeenCalledTimes(1);
+    expect(products.find).not.toHaveBeenCalled();
+  });
+  it('rejects reuse of a request ID for different order data', async () => {
+    await service.createOrder(dto);
+    orders.findOne.mockResolvedValue(orders.create.mock.calls[0][0]);
+    await expect(
+      service.createOrder({ ...dto, Address: 'different' }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(orders.create).toHaveBeenCalledTimes(1);
+  });
+  it('resolves a duplicate-key race to the already created order', async () => {
+    await service.createOrder(dto);
+    const saved = orders.create.mock.calls[0][0];
+    orders.create.mockRejectedValueOnce({ code: 11000 });
+    orders.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(saved);
+    const result = await service.createOrder(dto);
+    expect(result.Data.OrderId).toBe(saved._id);
+  });
 });

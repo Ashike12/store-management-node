@@ -1,3 +1,4 @@
+import { OrderOperationsService } from './business/services/order-operations.service';
 import 'reflect-metadata';
 import { Test } from '@nestjs/testing';
 import {
@@ -64,6 +65,7 @@ const invoice = {
   ProductSellInfo: [],
 };
 const order = {
+  RequestId: '12345678-1234-4123-8123-123456789abc',
   CustomerName: 'Test',
   PhoneNumber: '01700000000',
   Division: 'Dhaka',
@@ -105,6 +107,34 @@ type Case = {
   restricted?: boolean;
 };
 const cases: Case[] = [
+  {
+    method: 'post',
+    path: '/business/ListOrders',
+    service: OrderOperationsService,
+    call: 'list',
+    body: { Page: 1, Size: 10 },
+    invalid: { Page: 0 },
+    restricted: true,
+  },
+  {
+    method: 'post',
+    path: '/business/GetOrder',
+    service: OrderOperationsService,
+    call: 'detail',
+    body: { ItemId: 'order-1' },
+    args: ['order-1', user],
+    invalid: {},
+    restricted: true,
+  },
+  {
+    method: 'post',
+    path: '/business/TransitionOrder',
+    service: OrderOperationsService,
+    call: 'transition',
+    body: { ItemId: 'order-1', Status: 'confirmed', ExpectedVersion: 0 },
+    invalid: { Status: 'paid' },
+    restricted: true,
+  },
   {
     method: 'get',
     path: '/',
@@ -586,6 +616,13 @@ describe('API HTTP contracts (services mocked; no live infrastructure)', () => {
       })
       .expect(400);
     expect(mocks.get(ClientOrderService).quoteBuilder).not.toHaveBeenCalled();
+  });
+  it('rejects an unsupported product height unit', async () => {
+    await request(app.getHttpServer())
+      .post('/business/CreateProduct')
+      .set('Authorization', 'Bearer admin')
+      .send({ ...product, NetHeightUnit: 'inch' })
+      .expect(400);
   });
   it('passes pagination to the product service', async () => {
     await request(app.getHttpServer())

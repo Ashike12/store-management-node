@@ -2,7 +2,10 @@ import { ClientOrderService } from './client-order.service';
 
 describe('Custom mosquito net server pricing through checkout', () => {
   const products = { find: jest.fn() };
-  const orders = { create: jest.fn() };
+  const orders = {
+    create: jest.fn(),
+    findOne: jest.fn().mockResolvedValue(null),
+  };
   let service: ClientOrderService;
   const catalog = [
     {
@@ -63,6 +66,7 @@ describe('Custom mosquito net server pricing through checkout', () => {
   };
   const dto = (overrides = {}, price = 864) =>
     ({
+      RequestId: '12345678-1234-4123-8123-123456789abc',
       CustomerName: 'Test',
       PhoneNumber: '01700000000',
       Division: 'Dhaka',
@@ -88,6 +92,7 @@ describe('Custom mosquito net server pricing through checkout', () => {
   beforeEach(() => {
     products.find.mockReset().mockResolvedValue(catalog);
     orders.create.mockReset();
+    orders.findOne.mockReset().mockResolvedValue(null);
     jest.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       json: async () => ({ success: true }),
