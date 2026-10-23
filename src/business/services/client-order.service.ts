@@ -22,6 +22,8 @@ import {
 } from '../../shared/constant/order-validation.constant';
 import { PRODUCT_CATEGORY_SUBCATEGORY_MAP } from '../../shared/constant/product.constant';
 
+import { QuoteBuilderDto } from '../dto/client-order/quote-builder.dto';
+
 type CouponType = 'fixed' | 'percent';
 
 const VALID_COUPONS: Record<string, { discount: number; type: CouponType }> = {
@@ -57,6 +59,7 @@ type MosquitoNetBuilderOptions = {
 };
 
 type MosquitoNetCalculationResult = {
+  breakdown: Record<string, number>;
   finalPrice: number;
   fitaLengthInInch: number;
   totalFita: number;
@@ -75,6 +78,80 @@ export class ClientOrderService {
     @InjectModel('Product')
     private readonly productModel: mongoose.Model<Product>,
   ) {}
+
+  async quoteBuilder(dto: QuoteBuilderDto): Promise<CommandResponse> {
+    if (dto.BuildType !== 'MosquitoNet')
+      throw new BadRequestException('Unsupported custom product type');
+    if (
+      !Number.isInteger(dto.Quantity) ||
+      dto.Quantity < 1 ||
+      dto.Quantity > ORDER_LIMITS.quantity
+    )
+      throw new BadRequestException('Invalid quantity');
+    const calculated = await this.calculateMosquitoNetBuilderPrice(
+      dto.CustomOptions,
+    );
+    const unitPrice = this.getCalculatedUnitPrice(calculated);
+    const response = new CommandResponse();
+    response.setSuccess({
+      BuildType: 'MosquitoNet',
+      Currency: 'BDT',
+      ProductName: 'Custom Mosquito Net',
+      Category: 'Custom',
+      SubCategory: 'Mosquito Net',
+      ImageLinks: calculated.images,
+      UnitPrice: unitPrice,
+      Quantity: dto.Quantity,
+      TotalPrice: unitPrice * dto.Quantity,
+      CustomOptions: this.getCalculatedOptions(calculated),
+      Breakdown: {
+        ...calculated.breakdown,
+        UnroundedUnitPrice: calculated.finalPrice,
+        RoundingAdjustment: unitPrice - calculated.finalPrice,
+      },
+    });
+    return response;
+  }
+
+  private validateOptionStrings(options: Record<string, string>) {
+    if (
+      !options ||
+      typeof options !== 'object' ||
+      Array.isArray(options) ||
+      Object.keys(options).length > 50 ||
+      Object.entries(options).some(
+        ([key, value]) =>
+          key.length > 100 || typeof value !== 'string' || value.length > 1000,
+      )
+    )
+      throw new BadRequestException(
+        'Custom options must contain bounded strings',
+      );
+    if (
+      (options.BuildCalculationType !== undefined &&
+        options.BuildCalculationType !== 'MosquitoNet') ||
+      (options.BuildType !== undefined && options.BuildType !== 'Mosquito Net')
+    )
+      throw new BadRequestException('Unsupported custom product type');
+  }
+
+  private getCalculatedUnitPrice(calculated: MosquitoNetCalculationResult) {
+    const price = Math.ceil(calculated.finalPrice);
+    if (!Number.isFinite(price) || price <= 0 || price > ORDER_LIMITS.unitPrice)
+      throw new BadRequestException('Invalid calculated price');
+    return price;
+  }
+
+  private getCalculatedOptions(calculated: MosquitoNetCalculationResult) {
+    return {
+      ...calculated.options,
+      ServerCalculatedPrice: String(this.getCalculatedUnitPrice(calculated)),
+      ServerCalculatedFitaLengthInch: String(calculated.fitaLengthInInch),
+      ServerCalculatedFitaRoll: String(calculated.totalFita),
+      ServerCalculatedTopperNetInch: String(calculated.topperNet),
+      ServerCalculatedBoundaryNetInch: String(calculated.totalBoundaryNet),
+    };
+  }
 
   async createOrder(
     dto: CreateClientOrderDto,
@@ -163,20 +240,7 @@ export class ClientOrderService {
         item.UnitPrice > ORDER_LIMITS.unitPrice
       )
         throw new BadRequestException('Invalid submitted price');
-      if (
-        item.CustomOptions != null &&
-        (typeof item.CustomOptions !== 'object' ||
-          Array.isArray(item.CustomOptions) ||
-          Object.entries(item.CustomOptions).some(
-            ([key, value]) =>
-              key.length > 100 ||
-              typeof value !== 'string' ||
-              value.length > 1000,
-          ))
-      )
-        throw new BadRequestException(
-          'Custom options must contain bounded strings',
-        );
+      this.validateOptionStrings(item.CustomOptions ?? {});
     }
     const catalogItems = items.filter(
       (item) => !item.ProductId.startsWith('custom-'),
@@ -230,7 +294,7 @@ export class ClientOrderService {
       throw new BadRequestException('Unsupported custom product type');
     }
     const calculated = await this.calculateMosquitoNetBuilderPrice(options);
-    const serverUnitPrice = Math.ceil(calculated.finalPrice);
+    const serverUnitPrice = this.getCalculatedUnitPrice(calculated);
     if (
       !Number.isFinite(serverUnitPrice) ||
       serverUnitPrice <= 0 ||
@@ -249,20 +313,14 @@ export class ClientOrderService {
       ImageLinks: calculated.images,
       UnitPrice: serverUnitPrice,
       Quantity: item.Quantity,
-      CustomOptions: {
-        ...calculated.options,
-        ServerCalculatedPrice: String(serverUnitPrice),
-        ServerCalculatedFitaLengthInch: String(calculated.fitaLengthInInch),
-        ServerCalculatedFitaRoll: String(calculated.totalFita),
-        ServerCalculatedTopperNetInch: String(calculated.topperNet),
-        ServerCalculatedBoundaryNetInch: String(calculated.totalBoundaryNet),
-      },
+      CustomOptions: this.getCalculatedOptions(calculated),
     };
   }
 
   private async calculateMosquitoNetBuilderPrice(
     options: Record<string, string>,
   ): Promise<MosquitoNetCalculationResult> {
+    this.validateOptionStrings(options);
     const builderOptions = this.parseMosquitoNetBuilderOptions(options);
     const products = await this.productModel.find({
       _id: {
@@ -362,6 +420,25 @@ export class ClientOrderService {
       200;
 
     return {
+      breakdown: {
+        TotalNetInch: totalNet,
+        NoOfKuchi: noOfKuchi,
+        KuchiNetInch: kuchiNet,
+        BoundaryNetInch: totalBoundaryNet,
+        TopperNetInch: topperNetInInch,
+        BelowClothInch: belowClothInInch,
+        FitaLengthInch: fitaLengthInInch,
+        FitaRolls: totalFita,
+        SutarBobinCount: 1,
+        BoundaryCost:
+          (totalBoundaryNet / 36) * this.getEndUserPrice(mosquitoNetYard),
+        TopperCost: (topperNetInInch / 36) * this.getEndUserPrice(topperNet),
+        BelowClothCost:
+          (belowClothInInch / 36) * this.getEndUserPrice(belowCloth),
+        FitaCost: totalFita * this.getEndUserPrice(fita),
+        SutarBobinCost: this.getEndUserPrice(sutarBobin),
+        LabourCost: 200,
+      },
       finalPrice,
       fitaLengthInInch,
       totalFita,

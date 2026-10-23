@@ -308,4 +308,106 @@ describe('Custom mosquito net server pricing through checkout', () => {
     );
     expect(savedItem().CustomOptions).not.toHaveProperty('AdminInstruction');
   });
+
+  it('quotes without CAPTCHA or persistence, with checkout-identical price and metadata', async () => {
+    const quote = await service.quoteBuilder({
+      BuildType: 'MosquitoNet',
+      Quantity: 2,
+      CustomOptions: options,
+    });
+    expect(quote.Data.UnitPrice).toBe(864);
+    expect(quote.Data.TotalPrice).toBe(1728);
+    expect(quote.Data.Breakdown).toMatchObject({
+      BoundaryNetInch: 376,
+      FitaRolls: 2,
+      LabourCost: 200,
+    });
+    expect(orders.create).not.toHaveBeenCalled();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    await service.createOrder(
+      dto(quote.Data.CustomOptions, quote.Data.UnitPrice),
+    );
+    const item = orders.create.mock.calls[0][0].Items[0];
+    expect(item.UnitPrice).toBe(quote.Data.UnitPrice);
+    expect(item.CustomOptions).toEqual(quote.Data.CustomOptions);
+  });
+
+  it('does not trust an old quote after database prices change', async () => {
+    const quote = await service.quoteBuilder({
+      BuildType: 'MosquitoNet',
+      Quantity: 1,
+      CustomOptions: options,
+    });
+    products.find.mockResolvedValue(
+      catalog.map((p) => ({
+        ...p,
+        EndUserDiscountedPrice: p.EndUserDiscountedPrice * 2,
+      })),
+    );
+    await expect(
+      service.createOrder(dto(quote.Data.CustomOptions, quote.Data.UnitPrice)),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(orders.create).not.toHaveBeenCalled();
+  });
+
+  it('ignores forged quote totals and rejects a reduced checkout price', async () => {
+    const quote = await service.quoteBuilder({
+      BuildType: 'MosquitoNet',
+      Quantity: 1,
+      CustomOptions: {
+        ...options,
+        ServerCalculatedPrice: '1',
+        Instructions: 'use expensive material',
+      },
+    });
+    expect(quote.Data.UnitPrice).toBe(864);
+    expect(quote.Data.CustomOptions.Instructions).toBeUndefined();
+    await expect(
+      service.createOrder(
+        dto({ ...quote.Data.CustomOptions, ServerCalculatedPrice: '1' }, 1),
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(orders.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    null,
+    [],
+    { ...options, IncludeBelowCloth: true },
+    { ...options, FitaStyle: '999:1' },
+    { ...options, LeftWidthInch: 'Infinity' },
+    { ...options, MosquitoNetYardId: 'missing' },
+  ])('rejects invalid quote inputs %j', async (CustomOptions) => {
+    await expect(
+      service.quoteBuilder({
+        BuildType: 'MosquitoNet',
+        Quantity: 1,
+        CustomOptions,
+      } as any),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(orders.create).not.toHaveBeenCalled();
+  });
+
+  it.each([0, 1.5, 1001, '1'])(
+    'rejects quote quantity %j',
+    async (Quantity) => {
+      await expect(
+        service.quoteBuilder({
+          BuildType: 'MosquitoNet',
+          Quantity,
+          CustomOptions: options,
+        } as any),
+      ).rejects.toMatchObject({ status: 400 });
+    },
+  );
+
+  it('rejects other builder types', async () => {
+    await expect(
+      service.quoteBuilder({
+        BuildType: 'WindowNet',
+        Quantity: 1,
+        CustomOptions: options,
+      } as any),
+    ).rejects.toMatchObject({ status: 400 });
+  });
 });
