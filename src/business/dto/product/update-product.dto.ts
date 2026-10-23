@@ -10,6 +10,8 @@ export class UpdateProductDto {
 
   readonly SubCategory: string;
 
+  readonly NetHeight: string;
+
   @IsArray()
   @IsString({ each: true })
   readonly ImageLinks: string[];
@@ -25,6 +27,6 @@ export class UpdateProductDto {
   readonly EndUserDiscountedPrice: number;
 
   Quantity: number;
-  
+
   readonly Description: string;
 }

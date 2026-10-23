@@ -29,13 +29,17 @@ export class AuthService {
     @InjectModel(UserLoginLog.name)
     private UserLoginLogModel: Model<UserLoginLog>,
     private sharedService: SharedService,
-    private redisClient: RedisHelperService
-  ) { }
+    private redisClient: RedisHelperService,
+  ) {}
 
   async signUp(signUpDto: SignUpDto): Promise<boolean> {
-    const { FirstName, LastName, DisplayName, Email, Password, Phone } = signUpDto;
+    const { FirstName, LastName, DisplayName, Email, Password, Phone } =
+      signUpDto;
     const hashedPassword = await bcrypt.hash(Password, 10);
-    const displayName = (DisplayName == null || DisplayName == "") ? (FirstName + " " + LastName) : DisplayName;
+    const displayName =
+      DisplayName == null || DisplayName == ''
+        ? FirstName + ' ' + LastName
+        : DisplayName;
     const existingUserCount = await this.userModel.countDocuments({ Email });
     if (existingUserCount > 0) {
       throw new ConflictException('Email already exists');
@@ -55,20 +59,22 @@ export class AuthService {
       Roles: [UserRoles.Annonymous, UserRoles.WholeSaler, UserRoles.AppUser],
       RolesAllowedToRead: ['admin'],
       RolesAllowedToUpdate: ['admin'],
-      RolesAllowedToWrite: ['admin']
+      RolesAllowedToWrite: ['admin'],
     });
 
     return true;
   }
 
-  async login(loginDto: LoginDto): Promise<{ login_token: string, refresh_token: string }> {
+  async login(
+    loginDto: LoginDto,
+  ): Promise<{ login_token: string; refresh_token: string }> {
     const { Email, Password } = loginDto;
 
     const user = await this.userModel.findOne({ Email });
     if (!user) {
       throw new UnauthorizedException('Incorrect email or password');
     }
-    console.log(user.Email)
+    console.log(user.Email);
     if (user && user.Roles.indexOf(UserRoles.Customer) > -1 && !user.Active) {
       throw new UnauthorizedException('Inactive Customer');
     }
@@ -79,34 +85,50 @@ export class AuthService {
     const tokenMetaData: TokenInfo = {
       UserId: user._id,
       UserName: user.DisplayName,
-      Roles: user.Roles
+      Roles: user.Roles,
     };
     const login_token = this.jwtService.sign(tokenMetaData);
     const refresh_token = this.sharedService.getUid();
-    await this.redisClient.setWithExpiryInSecond(refresh_token, JSON.stringify(tokenMetaData), 5000);
+    await this.redisClient.setWithExpiryInSecond(
+      refresh_token,
+      JSON.stringify(tokenMetaData),
+      5000,
+    );
     //write log to db
     await this.UserLoginLogModel.create({
       _id: this.sharedService.getUid(),
       UserId: user._id,
       DisplayName: user.DisplayName,
-      LoginTime: new Date()
-    })
+      LoginTime: new Date(),
+    });
 
     return { login_token, refresh_token };
   }
 
-  async getAnonymousToken(): Promise<{ login_token: string, refresh_token: string }> {
+  async getAnonymousToken(): Promise<{
+    login_token: string;
+    refresh_token: string;
+  }> {
     const tokenMetaData: AnnonymousTokenInfo = {
-      Roles: ['annonymous']
+      Roles: ['annonymous'],
     };
     const login_token = this.jwtService.sign(tokenMetaData);
     const refresh_token = this.sharedService.getUid();
-    await this.redisClient.setWithExpiryInSecond(refresh_token, JSON.stringify(tokenMetaData), 5000);
+    await this.redisClient.setWithExpiryInSecond(
+      refresh_token,
+      JSON.stringify(tokenMetaData),
+      5000,
+    );
     return { login_token, refresh_token };
   }
 
   private getTokenMetaData(user: User) {
-    const tokenMetaData = { id: user._id, roles: user.Roles, email: user.Email, DisplayName: user.DisplayName };
+    const tokenMetaData = {
+      id: user._id,
+      roles: user.Roles,
+      email: user.Email,
+      DisplayName: user.DisplayName,
+    };
     return tokenMetaData;
   }
 
@@ -114,7 +136,9 @@ export class AuthService {
     const { RefreshToken } = loginDto;
     const tokenInfo = await this.redisClient.get(RefreshToken);
     if (tokenInfo == null) {
-      throw new UnauthorizedException('Refresh token expired, login again to continue');
+      throw new UnauthorizedException(
+        'Refresh token expired, login again to continue',
+      );
     }
     const login_token = this.jwtService.sign(JSON.parse(tokenInfo));
     return { login_token };
@@ -122,37 +146,42 @@ export class AuthService {
 
   async setPassword(dto: SetPasswordDto): Promise<CommandResponse> {
     const response = new CommandResponse();
-    const userId = (await this.redisClient.get(dto.ActivationId));
+    const userId = await this.redisClient.get(dto.ActivationId);
     if (userId == null || userId == '') {
       throw new UnauthorizedException('Activation id invalid');
     }
     const hashedPassword = await bcrypt.hash(dto.Password, 10);
-    await this.userModel.findByIdAndUpdate(userId, { Password: hashedPassword }, {
-      new: true,
-      runValidators: true,
-    });
-    await this.redisClient.del(dto.ActivationId)
+    await this.userModel.findByIdAndUpdate(
+      userId,
+      { Password: hashedPassword },
+      {
+        new: true,
+        runValidators: true,
+      },
+    );
+    await this.redisClient.del(dto.ActivationId);
     return response;
   }
 
-
-  async getLoginLog(dto: GetLoginLogsDto, userInfo: User): Promise<QueryRespone> {
+  async getLoginLog(
+    dto: GetLoginLogsDto,
+    userInfo: User,
+  ): Promise<QueryRespone> {
     const response = new QueryRespone();
     let filter = {};
-    if(userInfo.Roles.indexOf(UserRoles.WholeSaler)){
-      filter = {Roles: UserRoles.WholeSaler};
+    if (userInfo.Roles.indexOf(UserRoles.WholeSaler)) {
+      filter = { Roles: UserRoles.WholeSaler };
     }
     const loginLogs = await this.UserLoginLogModel.find(filter);
     const logoutputList: GetLoginLogResponseDto[] = [];
-    loginLogs.forEach(log => {
+    loginLogs.forEach((log) => {
       logoutputList.push({
         DisplayName: log.DisplayName,
         LoginTime: log.LoginTime,
-        UserId: log.UserId
-      })
-    })
+        UserId: log.UserId,
+      });
+    });
     response.setData(logoutputList, logoutputList.length);
     return response;
   }
-
 }

@@ -15,6 +15,9 @@ export class Product extends RootSchema {
   SubCategory: string;
 
   @Prop()
+  NetHeight: string;
+
+  @Prop()
   Description: string;
 
   @Prop({ type: [String], default: [] })
@@ -37,7 +40,6 @@ export class Product extends RootSchema {
 
   @Prop()
   Quantity: number;
-
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);

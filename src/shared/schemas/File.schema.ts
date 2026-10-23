@@ -13,7 +13,6 @@ export class FileInfo extends RootSchema {
 
   @Prop()
   FileSize: number;
-
 }
 
 export const FileSchema = SchemaFactory.createForClass(FileInfo);

@@ -1,33 +1,33 @@
-import { Prop } from "@nestjs/mongoose";
+import { Prop } from '@nestjs/mongoose';
 
 export class RootSchema {
-    @Prop()
-    _id: string;
+  @Prop()
+  _id: string;
 
-    @Prop()
-    CreatedDate: string;
+  @Prop()
+  CreatedDate: string;
 
-    @Prop()
-    RolesAllowedToRead?: string[];
+  @Prop()
+  RolesAllowedToRead?: string[];
 
-    @Prop()
-    RolesAllowedToWrite?: string[];
+  @Prop()
+  RolesAllowedToWrite?: string[];
 
-    @Prop()
-    RolesAllowedToUpdate?: string[];
+  @Prop()
+  RolesAllowedToUpdate?: string[];
 
-    @Prop()
-    RolesAllowedToDelete?: string[];
+  @Prop()
+  RolesAllowedToDelete?: string[];
 
-    @Prop()
-    IdsAllowedToRead?: string[];
+  @Prop()
+  IdsAllowedToRead?: string[];
 
-    @Prop()
-    IdsAllowedToWrite?: string[];
-    
-    @Prop()
-    IdsAllowedToUpdate?: string[];
+  @Prop()
+  IdsAllowedToWrite?: string[];
 
-    @Prop()
-    IdsAllowedToDelete?: string[];
+  @Prop()
+  IdsAllowedToUpdate?: string[];
+
+  @Prop()
+  IdsAllowedToDelete?: string[];
 }

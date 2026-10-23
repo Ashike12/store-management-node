@@ -11,6 +11,7 @@ import { OrderSchema } from '../shared/schemas/order.schema';
 import { ProductService } from './services/product.service';
 import { InvoiceService } from './services/invoice.service';
 import { ClientOrderService } from './services/client-order.service';
+import { AiSuggestionService } from './services/ai-suggestion.service';
 
 @Module({
   imports: [
@@ -20,10 +21,16 @@ import { ClientOrderService } from './services/client-order.service';
       { name: 'Product', schema: ProductSchema },
       { name: 'ProductSell', schema: ProductSellSchema },
       { name: 'Invoice', schema: InvoiceSchema },
-      { name: 'Order', schema: OrderSchema }
+      { name: 'Order', schema: OrderSchema },
     ]),
   ],
   controllers: [BusinessController],
-  providers: [SharedService, ProductService, InvoiceService, ClientOrderService],
+  providers: [
+    SharedService,
+    ProductService,
+    InvoiceService,
+    ClientOrderService,
+    AiSuggestionService,
+  ],
 })
 export class BusinessModule {}

@@ -16,7 +16,7 @@ export class WholesalerStatistics extends RootSchema {
 
   @Prop()
   RemainingPayment: number;
-
 }
 
-export const WholesalerStatisticsSchema = SchemaFactory.createForClass(WholesalerStatistics);
+export const WholesalerStatisticsSchema =
+  SchemaFactory.createForClass(WholesalerStatistics);

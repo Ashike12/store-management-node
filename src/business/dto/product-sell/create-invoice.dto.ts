@@ -9,12 +9,15 @@ export class CreateInvoiceDto {
   readonly WholeSalerId: string;
 
   @IsNotEmpty()
-  @IsIn([INVOICE_CONSTANT.WHOLESALE, INVOICE_CONSTANT.CONSUMER, INVOICE_CONSTANT.DUE_PAYMENT])
+  @IsIn([
+    INVOICE_CONSTANT.WHOLESALE,
+    INVOICE_CONSTANT.CONSUMER,
+    INVOICE_CONSTANT.DUE_PAYMENT,
+  ])
   readonly InvoiceType: string = INVOICE_CONSTANT.WHOLESALE;
 }
 
 export class ProductSellDto {
-
   @IsNotEmpty()
   readonly ProductId: string;
 

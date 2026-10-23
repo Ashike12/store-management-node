@@ -8,7 +8,7 @@ export class RedisHelperService implements OnModuleInit, OnModuleDestroy {
   constructor() {
     this.client = new Redis({
       host: process.env.REDIS_URI, // Redis host
-      port: Number(process.env.REDIS_PORT),        // Redis port
+      port: Number(process.env.REDIS_PORT), // Redis port
       password: process.env.REDIS_PASS, // optional
     });
 
@@ -29,7 +29,11 @@ export class RedisHelperService implements OnModuleInit, OnModuleDestroy {
     await this.client.set(key, value);
   }
 
-  async setWithExpiryInSecond(key: string, value: string, expiry: number): Promise<void> {
+  async setWithExpiryInSecond(
+    key: string,
+    value: string,
+    expiry: number,
+  ): Promise<void> {
     await this.client.set(key, value, 'EX', expiry);
   }
 
@@ -39,5 +43,17 @@ export class RedisHelperService implements OnModuleInit, OnModuleDestroy {
 
   async del(key: string): Promise<number> {
     return this.client.del(key);
+  }
+
+  async incrementWithExpiryInSecond(
+    key: string,
+    expiry: number,
+  ): Promise<number> {
+    const created = await this.client.set(key, '1', 'EX', expiry, 'NX');
+    if (created) {
+      return 1;
+    }
+
+    return this.client.incr(key);
   }
 }

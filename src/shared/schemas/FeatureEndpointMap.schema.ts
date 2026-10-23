@@ -19,7 +19,7 @@ export class FeatureEndpointMap {
 
   @Prop()
   RoleName: string;
-
 }
 
-export const FeatureEndpointMapSchema = SchemaFactory.createForClass(FeatureEndpointMap);
+export const FeatureEndpointMapSchema =
+  SchemaFactory.createForClass(FeatureEndpointMap);

@@ -21,7 +21,7 @@ async function getApp(): Promise<INestApplication> {
 
   if (!appInitPromise) {
     appInitPromise = (async () => {
-      const { createNestApp } = await import('../src/bootstrap-app');
+      const { createNestApp } = await import('../src/bootstrap-app.js');
       const app = await createNestApp();
       await app.init();
       cachedApp = app;

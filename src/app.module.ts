@@ -24,7 +24,7 @@ import { buildMongoUri } from './build-mongo-uri';
     UserModule,
     AuthModule,
     StorageModule,
-    BusinessModule
+    BusinessModule,
   ],
   controllers: [AppController],
   providers: [AppService],
