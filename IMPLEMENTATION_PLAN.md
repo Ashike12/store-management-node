@@ -82,12 +82,12 @@ Auth and user routes remain defined in their controllers. Preserve existing casi
 Frontend mirror: client src/pages/BuildYourOwn.tsx. Backend authority currently runs during CreateClientOrder.
 
 - LW, RW, LL, RL and cloth heights are inches.
-- Yard product NetHeight is interpreted as feet; heightInInch = NetHeight * 12. Admin still labels this as inches: resolve BE-103/ADMIN-101 before creating fresh test data.
+- Yard product NetHeight is feet; heightInInch = NetHeight * 12. BE-103 updates the admin label and explicit API unit to feet.
 - TotalNet = LW + RW + LL + RL.
-- NoOfKuchi = count * 8 for 4side; otherwise floor(TotalNet / gap) + 1. The floor is current implementation; confirm intended rounding for nonintegral gaps.
+- NoOfKuchi = count * 8 for 4side; otherwise floor(TotalNet / gap) + 1. The owner confirmed floor rounding for nonintegral gaps in BE-103.
 - KuchiNet = NoOfKuchi * 2; TotalBoundaryNet = TotalNet + KuchiNet.
 - TopperNet = ceil(min(LW,RW,LL,RL) / heightInInch) * oppositeSideRun. Width operation uses max(LL,RL); length operation uses max(LW,RW).
-- Current denominator uses the main net product height even when a different topper product is selected; confirm this rule before changing it.
+- Current denominator uses the main net product height even when a different topper product is selected; the owner confirmed this rule for mosquito-net-v1.
 - BelowCloth = TotalBoundaryNet / max(floor(30 / max(2*topHeight + belowHeight,1)),1), or zero when disabled.
 - For Fita a:b, requiredInches = TotalNet + a*max(LW,RW) + b*max(LL,RL).
 - One Fita roll = 12 yards = 36 feet = 432 inches. Rolls = max(ceil(requiredInches/432),1).
@@ -111,13 +111,17 @@ Add a public rate-limited quote/validate endpoint for structured builder inputs.
 
 Completed 2026-10-23: POST business/QuoteBuilder reuses checkout validation/calculation, returns normalized material metadata and per-unit breakdown, and does not create orders. Checkout rereads current products and rejects altered or stale prices. Both permission collections seeded and replay verified (five records each), including the owner-approved new FeatureRoleMap schema. Typecheck and 385 regression tests pass. CLIENT-101 remains separate: its exact request/response and UI handling contract is documented in docs/BUILDER_QUOTE.md. No production build or deployment performed.
 
-### BE-103 - P1 - Units and formula contract (TODO)
+### BE-103 - P1 - Units and formula contract (COMPLETE)
 
 Define NetHeight unit explicitly across all repos and use it in fresh test/seed data; no existing-data conversion is required. Extract a pure calculator and fixture tests for both operations, below cloth, alternate topper, gap rounding and Fita boundaries 432/433/864 inches. Record formula version on orders. See ADMIN-101 and CLIENT-102.
 
-### BE-104 - P1 - Order operations (TODO)
+Completed 2026-10-23: owner confirmed feet, main-fabric topper height and floor-based gap counting. Extracted pure mosquito-net-v1 calculator with fixtures for both operations, below cloth, alternate topper and 432/433/864-inch Fita boundaries. Product responses expose NetHeightUnit; admin labels feet; client preview uses full net height. Quote/options/orders record the formula version. No existing data conversion. See docs/UNITS_AND_ORDERS.md.
+
+### BE-104 - P1 - Order operations (COMPLETE)
 
 Add authorized paginated order listing/details, fulfillment transitions, cancellation and audit history for ADMIN-102. Define stock reservation/consumption timing and atomic updates so duplicate orders or simultaneous checkout cannot oversell. Keep order status distinct from payment status.
+
+Completed 2026-10-23: admin-only ListOrders/GetOrder/TransitionOrder APIs, separate unpaid payment status, versioned transitions and append-only audit. Owner selected deduction on confirmation, not checkout. Confirmation/cancellation use transactions, conditional stock updates and stored material snapshots. UUID request-ID uniqueness prevents checkout retry duplicates. Both permission maps and indexes were seeded/replayed. Eight isolated local replica-set integration tests verify concurrency, rollback, cancellation, access and pagination. ADMIN-102 UI and BE-106 invoice inventory consistency remain separate work. See docs/UNITS_AND_ORDERS.md.
 
 ### BE-105 - P1 - Payments (DECISION)
 

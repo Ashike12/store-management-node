@@ -1,5 +1,12 @@
-﻿import {
+import { createHash } from 'node:crypto';
+import {
+  calculateMosquitoNet,
+  MosquitoNetBuilderOptions,
+  FORMULA_VERSION,
+} from '../calculations/mosquito-net';
+import {
   BadRequestException,
+  ConflictException,
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -35,27 +42,6 @@ const VALID_COUPONS: Record<string, { discount: number; type: CouponType }> = {
 
 type VerifiedCaptcha = {
   hostname?: string;
-};
-
-type MosquitoNetBuilderOptions = {
-  leftWidth: number;
-  rightWidth: number;
-  leftLength: number;
-  rightLength: number;
-  mosquitoNetYardId: string;
-  includeBelowCloth: boolean;
-  belowClothId: string;
-  includeTopperNet: boolean;
-  topperNetYardId: string;
-  topperDirection: 'width' | 'length';
-  topHeight: number;
-  belowHeight: number;
-  kuchiStyle: '4side' | 'gap';
-  kuchiCount: number;
-  kuchiGap: number;
-  fitaId: string;
-  fitaStyle: string;
-  sutarBobinId: string;
 };
 
 type MosquitoNetCalculationResult = {
@@ -94,6 +80,7 @@ export class ClientOrderService {
     const unitPrice = this.getCalculatedUnitPrice(calculated);
     const response = new CommandResponse();
     response.setSuccess({
+      FormulaVersion: FORMULA_VERSION,
       BuildType: 'MosquitoNet',
       Currency: 'BDT',
       ProductName: 'Custom Mosquito Net',
@@ -145,6 +132,7 @@ export class ClientOrderService {
   private getCalculatedOptions(calculated: MosquitoNetCalculationResult) {
     return {
       ...calculated.options,
+      FormulaVersion: FORMULA_VERSION,
       ServerCalculatedPrice: String(this.getCalculatedUnitPrice(calculated)),
       ServerCalculatedFitaLengthInch: String(calculated.fitaLengthInInch),
       ServerCalculatedFitaRoll: String(calculated.totalFita),
@@ -161,6 +149,24 @@ export class ClientOrderService {
       dto.CaptchaToken,
       customerIp,
     );
+    const { CaptchaToken: _captcha, RequestId: _request, ...payload } = dto;
+    const canonical = (value: unknown): unknown =>
+      Array.isArray(value)
+        ? value.map(canonical)
+        : value && typeof value === 'object'
+          ? Object.fromEntries(
+              Object.entries(value)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([k, v]) => [k, canonical(v)]),
+            )
+          : value;
+    const requestHash = createHash('sha256')
+      .update(JSON.stringify(canonical(payload)))
+      .digest('hex');
+    const existing = await this.orderModel.findOne({
+      RequestId: dto.RequestId,
+    });
+    if (existing) return this.replayOrder(existing, requestHash);
     const normalizedItems = await this.normalizeItems(dto.Items);
     const subtotal = normalizedItems.reduce(
       (sum, item) => sum + item.UnitPrice * item.Quantity,
@@ -175,43 +181,82 @@ export class ClientOrderService {
     const couponDiscount = this.getCouponDiscount(couponCode, subtotal);
     const totalAmount = Math.max(subtotal - couponDiscount + shippingCost, 0);
     const orderId = this.sharedService.getUid();
-    const orderNumber = `ORD-${Date.now()}`;
+    const orderNumber = `ORD-${orderId}`;
     const createdDate = new Date().toISOString();
 
-    await this.orderModel.create({
-      _id: orderId,
-      CreatedDate: createdDate,
-      RolesAllowedToRead: [UserRoles.Admin],
-      RolesAllowedToWrite: [UserRoles.Admin],
-      RolesAllowedToUpdate: [UserRoles.Admin],
-      RolesAllowedToDelete: [UserRoles.Admin],
-      OrderNumber: orderNumber,
-      CustomerName: dto.CustomerName.trim(),
-      PhoneNumber: dto.PhoneNumber.trim(),
-      Division: division,
-      District: district,
-      Area: dto.Area.trim(),
-      PostCode: dto.PostCode.trim(),
-      Address: dto.Address.trim(),
-      DeliveryNotes: dto.DeliveryNotes?.trim() || '',
-      DeliveryZone: dto.DeliveryZone,
-      CouponCode: couponCode || '',
-      CouponDiscount: couponDiscount,
-      ShippingCost: shippingCost,
-      Subtotal: subtotal,
-      TotalAmount: totalAmount,
-      OrderStatus: 'pending',
-      Items: normalizedItems,
-      CaptchaVerifiedAt: createdDate,
-      CaptchaHostname: verifiedCaptcha.hostname || '',
-      CustomerIp: customerIp || '',
-    });
+    try {
+      await this.orderModel.create({
+        RequestId: dto.RequestId,
+        RequestHash: requestHash,
+        FormulaVersion: FORMULA_VERSION,
+        Version: 0,
+        PaymentStatus: 'unpaid',
+        StockDeducted: false,
+        StockMovements: [],
+        AuditHistory: [
+          {
+            From: '',
+            To: 'pending',
+            By: 'storefront',
+            At: createdDate,
+            Note: 'Order placed',
+          },
+        ],
+        _id: orderId,
+        CreatedDate: createdDate,
+        RolesAllowedToRead: [UserRoles.Admin],
+        RolesAllowedToWrite: [UserRoles.Admin],
+        RolesAllowedToUpdate: [UserRoles.Admin],
+        RolesAllowedToDelete: [UserRoles.Admin],
+        OrderNumber: orderNumber,
+        CustomerName: dto.CustomerName.trim(),
+        PhoneNumber: dto.PhoneNumber.trim(),
+        Division: division,
+        District: district,
+        Area: dto.Area.trim(),
+        PostCode: dto.PostCode.trim(),
+        Address: dto.Address.trim(),
+        DeliveryNotes: dto.DeliveryNotes?.trim() || '',
+        DeliveryZone: dto.DeliveryZone,
+        CouponCode: couponCode || '',
+        CouponDiscount: couponDiscount,
+        ShippingCost: shippingCost,
+        Subtotal: subtotal,
+        TotalAmount: totalAmount,
+        OrderStatus: 'pending',
+        Items: normalizedItems,
+        CaptchaVerifiedAt: createdDate,
+        CaptchaHostname: verifiedCaptcha.hostname || '',
+        CustomerIp: customerIp || '',
+      });
+    } catch (error) {
+      if (error?.code !== 11000) throw error;
+      const duplicate = await this.orderModel.findOne({
+        RequestId: dto.RequestId,
+      });
+      if (!duplicate) throw error;
+      return this.replayOrder(duplicate, requestHash);
+    }
 
     const response = new CommandResponse();
     response.setSuccess({
       OrderId: orderId,
       OrderNumber: orderNumber,
       TotalAmount: totalAmount,
+    });
+    return response;
+  }
+
+  private replayOrder(order: Order, hash: string) {
+    if (order.RequestHash !== hash)
+      throw new ConflictException(
+        'RequestId already used for a different order',
+      );
+    const response = new CommandResponse();
+    response.setSuccess({
+      OrderId: order._id,
+      OrderNumber: order.OrderNumber,
+      TotalAmount: order.TotalAmount,
     });
     return response;
   }
@@ -276,6 +321,9 @@ export class ClientOrderService {
           UnitPrice: unitPrice,
           Quantity: item.Quantity,
           CustomOptions: {},
+          InventoryRequirements: [
+            { ProductId: item.ProductId, Quantity: item.Quantity },
+          ],
         };
       }),
     );
@@ -314,7 +362,35 @@ export class ClientOrderService {
       UnitPrice: serverUnitPrice,
       Quantity: item.Quantity,
       CustomOptions: this.getCalculatedOptions(calculated),
+      InventoryRequirements: this.builderInventory(calculated, item.Quantity),
     };
+  }
+
+  private builderInventory(
+    calculated: MosquitoNetCalculationResult,
+    quantity: number,
+  ) {
+    const o = calculated.options;
+    return [
+      {
+        ProductId: o.MosquitoNetYardId,
+        Quantity: (calculated.totalBoundaryNet / 36) * quantity,
+      },
+      {
+        ProductId: o.TopperNetYardId,
+        Quantity: (calculated.topperNet / 36) * quantity,
+      },
+      ...(o.IncludeBelowCloth === 'true'
+        ? [
+            {
+              ProductId: o.BelowClothId,
+              Quantity: (calculated.breakdown.BelowClothInch / 36) * quantity,
+            },
+          ]
+        : []),
+      { ProductId: o.FitaId, Quantity: calculated.totalFita * quantity },
+      { ProductId: o.SutarBobinId, Quantity: quantity },
+    ];
   }
 
   private async calculateMosquitoNetBuilderPrice(
@@ -370,80 +446,20 @@ export class ClientOrderService {
       'Sutar bobin',
     );
 
-    const totalNet =
-      builderOptions.leftWidth +
-      builderOptions.rightWidth +
-      builderOptions.leftLength +
-      builderOptions.rightLength;
-    const noOfKuchi =
-      builderOptions.kuchiStyle === '4side'
-        ? builderOptions.kuchiCount * 8
-        : Math.floor(totalNet / Math.max(builderOptions.kuchiGap, 1)) + 1;
-    const kuchiNet = noOfKuchi * 2;
-    const totalBoundaryNet = totalNet + kuchiNet;
-    const minimumSide = Math.min(
-      builderOptions.leftWidth,
-      builderOptions.rightWidth,
-      builderOptions.leftLength,
-      builderOptions.rightLength,
-    );
-    const mosquitoNetYardHeightInInch = this.getNetHeight(mosquitoNetYard) * 12;
     this.getNetHeight(topperNet);
-    const oppositeSideRun =
-      builderOptions.topperDirection === 'width'
-        ? Math.max(builderOptions.leftLength, builderOptions.rightLength)
-        : Math.max(builderOptions.leftWidth, builderOptions.rightWidth);
-    const topperNetInInch =
-      Math.ceil(minimumSide / mosquitoNetYardHeightInInch) * oppositeSideRun;
-    const topAndBelowHeight =
-      builderOptions.topHeight * 2 + builderOptions.belowHeight;
-    const belowClothInInch = builderOptions.includeBelowCloth
-      ? totalBoundaryNet /
-        Math.max(Math.floor(30 / Math.max(topAndBelowHeight, 1)), 1)
-      : 0;
-    const { widthCount, lengthCount } = this.parseFitaStyle(
-      builderOptions.fitaStyle,
-    );
-    const fitaLengthInInch =
-      totalNet +
-      widthCount *
-        Math.max(builderOptions.leftWidth, builderOptions.rightWidth) +
-      lengthCount *
-        Math.max(builderOptions.leftLength, builderOptions.rightLength);
-    const totalFita = Math.max(Math.ceil(fitaLengthInInch / (12 * 36)), 1);
-    const finalPrice =
-      (totalBoundaryNet / 36) * this.getEndUserPrice(mosquitoNetYard) +
-      (topperNetInInch / 36) * this.getEndUserPrice(topperNet) +
-      (belowClothInInch / 36) * this.getEndUserPrice(belowCloth) +
-      totalFita * this.getEndUserPrice(fita) +
-      this.getEndUserPrice(sutarBobin) +
-      200;
-
-    return {
-      breakdown: {
-        TotalNetInch: totalNet,
-        NoOfKuchi: noOfKuchi,
-        KuchiNetInch: kuchiNet,
-        BoundaryNetInch: totalBoundaryNet,
-        TopperNetInch: topperNetInInch,
-        BelowClothInch: belowClothInInch,
-        FitaLengthInch: fitaLengthInInch,
-        FitaRolls: totalFita,
-        SutarBobinCount: 1,
-        BoundaryCost:
-          (totalBoundaryNet / 36) * this.getEndUserPrice(mosquitoNetYard),
-        TopperCost: (topperNetInInch / 36) * this.getEndUserPrice(topperNet),
-        BelowClothCost:
-          (belowClothInInch / 36) * this.getEndUserPrice(belowCloth),
-        FitaCost: totalFita * this.getEndUserPrice(fita),
-        SutarBobinCost: this.getEndUserPrice(sutarBobin),
-        LabourCost: 200,
+    const calculation = calculateMosquitoNet(
+      builderOptions,
+      this.getNetHeight(mosquitoNetYard),
+      {
+        yard: this.getEndUserPrice(mosquitoNetYard),
+        topper: this.getEndUserPrice(topperNet),
+        cloth: this.getEndUserPrice(belowCloth),
+        fita: this.getEndUserPrice(fita),
+        thread: this.getEndUserPrice(sutarBobin),
       },
-      finalPrice,
-      fitaLengthInInch,
-      totalFita,
-      topperNet: topperNetInInch,
-      totalBoundaryNet,
+    );
+    return {
+      ...calculation,
       images: mosquitoNetYard.ImageLinks || [],
       options: {
         BuildCalculationType: 'MosquitoNet',

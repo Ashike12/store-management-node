@@ -2,6 +2,9 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { RootSchema } from './root.schema';
 
 export class OrderItemSnapshot {
+  @Prop({ type: [Object], default: [] })
+  InventoryRequirements: { ProductId: string; Quantity: number }[];
+
   @Prop()
   ProductId: string;
 
@@ -31,6 +34,25 @@ export class OrderItemSnapshot {
   timestamps: true,
 })
 export class Order extends RootSchema {
+  @Prop({ required: true }) RequestId: string;
+  @Prop({ required: true }) RequestHash: string;
+  @Prop() FormulaVersion: string;
+  @Prop({ default: 'unpaid', enum: ['unpaid', 'paid', 'refunded'] })
+  PaymentStatus: string;
+  @Prop({ default: 0 }) Version: number;
+  @Prop({ default: false }) StockDeducted: boolean;
+  @Prop({ type: [Object], default: [] }) StockMovements: {
+    ProductId: string;
+    Quantity: number;
+  }[];
+  @Prop({ type: [Object], default: [] }) AuditHistory: {
+    From: string;
+    To: string;
+    By: string;
+    At: string;
+    Note: string;
+  }[];
+
   @Prop()
   OrderNumber: string;
 
@@ -93,3 +115,10 @@ export class Order extends RootSchema {
 }
 
 export const OrderSchema = SchemaFactory.createForClass(Order);
+
+OrderSchema.index(
+  { RequestId: 1 },
+  { unique: true, partialFilterExpression: { RequestId: { $type: 'string' } } },
+);
+OrderSchema.index({ CreatedDate: -1, _id: -1 });
+OrderSchema.index({ OrderStatus: 1, CreatedDate: -1 });

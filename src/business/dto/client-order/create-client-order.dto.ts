@@ -3,6 +3,7 @@ import {
   ArrayMinSize,
   ArrayMaxSize,
   IsInt,
+  IsUUID,
   Min,
   Max,
   IsArray,
@@ -53,6 +54,9 @@ export class CreateClientOrderItemDto {
 }
 
 export class CreateClientOrderDto {
+  @IsUUID(4)
+  readonly RequestId: string;
+
   @IsString()
   @IsNotEmpty()
   readonly CustomerName: string;

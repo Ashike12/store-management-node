@@ -1,3 +1,4 @@
+import { OrderOperationsService } from './services/order-operations.service';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { BusinessController } from './business.controller';
@@ -30,6 +31,7 @@ import { AiSuggestionService } from './services/ai-suggestion.service';
     ProductService,
     InvoiceService,
     ClientOrderService,
+    OrderOperationsService,
     AiSuggestionService,
   ],
 })

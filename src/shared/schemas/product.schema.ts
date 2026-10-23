@@ -17,6 +17,9 @@ export class Product extends RootSchema {
   @Prop()
   NetHeight: string;
 
+  @Prop({ default: 'feet', enum: ['feet'] })
+  NetHeightUnit: string;
+
   @Prop()
   Description: string;
 
