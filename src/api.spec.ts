@@ -253,6 +253,15 @@ const cases: Case[] = [
   },
   {
     method: 'post',
+    path: '/business/QuoteBuilder',
+    service: ClientOrderService,
+    call: 'quoteBuilder',
+    body: { BuildType: 'MosquitoNet', Quantity: 1, CustomOptions: {} },
+    public: true,
+    invalid: { BuildType: 'WindowNet', Quantity: 0, CustomOptions: [] },
+  },
+  {
+    method: 'post',
     path: '/business/CreateClientOrder',
     service: ClientOrderService,
     call: 'createOrder',
@@ -557,7 +566,7 @@ describe('API HTTP contracts (services mocked; no live infrastructure)', () => {
       .expect(400);
     expect(mocks.get(AuthService).login).not.toHaveBeenCalled();
   });
-  it.each(['GetClientProducts', 'CreateClientOrder'])(
+  it.each(['GetClientProducts', 'CreateClientOrder', 'QuoteBuilder'])(
     'rate-limits %s',
     async (route) => {
       redis.incrementWithExpiryInSecond.mockResolvedValue(11);
@@ -566,6 +575,18 @@ describe('API HTTP contracts (services mocked; no live infrastructure)', () => {
       expect(mocks.get(c.service)[c.call]).not.toHaveBeenCalled();
     },
   );
+  it('rejects client prices on the quote request', async () => {
+    await request(app.getHttpServer())
+      .post('/business/QuoteBuilder')
+      .send({
+        BuildType: 'MosquitoNet',
+        Quantity: 1,
+        CustomOptions: {},
+        UnitPrice: 1,
+      })
+      .expect(400);
+    expect(mocks.get(ClientOrderService).quoteBuilder).not.toHaveBeenCalled();
+  });
   it('passes pagination to the product service', async () => {
     await request(app.getHttpServer())
       .post('/business/GetProducts?pageSize=10&pageNumber=2')

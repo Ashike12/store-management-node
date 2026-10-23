@@ -7,6 +7,8 @@ import {
   Query,
   Req,
   ForbiddenException,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { QueryRespone } from '../shared/response/query.response';
@@ -30,6 +32,8 @@ import { ClientOrderService } from './services/client-order.service';
 import { RateLimitGuard } from '../guards/rate-limit.guard';
 import { GenerateAiSuggestionDto } from './dto/ai-suggestion/generate-ai-suggestion.dto';
 import { AiSuggestionService } from './services/ai-suggestion.service';
+
+import { QuoteBuilderDto } from './dto/client-order/quote-builder.dto';
 
 @Controller('business')
 export class BusinessController {
@@ -69,6 +73,14 @@ export class BusinessController {
     @Body() dto: GetProductDto,
   ): Promise<QueryRespone> {
     return this.productService.getClientProduct(query, dto);
+  }
+
+  @Post('QuoteBuilder')
+  @HttpCode(200)
+  @UseGuards(RateLimitGuard())
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
+  QuoteBuilder(@Body() dto: QuoteBuilderDto): Promise<CommandResponse> {
+    return this.clientOrderService.quoteBuilder(dto);
   }
 
   @Post('CreateClientOrder')

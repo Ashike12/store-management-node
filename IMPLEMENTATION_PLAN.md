@@ -20,7 +20,7 @@ Every new API implementation must include corresponding FeatureEndpointMap and F
 - Verify authorized roles can call the endpoint and unauthorized roles cannot. Preserve own-record restrictions for employees and wholesalers; a feature permission does not grant access to another user's data.
 - Explicitly document public endpoint access; do not accidentally require login for public storefront APIs or grant private APIs public access.
 - Include seed application and permission checks in acceptance criteria. Do not mark a new API complete while its required permission data is missing, or bypass validation to avoid adding seed data.
-- Source note: src/auth/jwt.strategy.ts currently queries FeatureEndpointMap. FeatureRoleMap and its seed implementation were not located in the inspected backend source; inspect the existing database/seed setup and establish the version-controlled seed path before implementation. Never guess its fields.
+- Source note: src/auth/jwt.strategy.ts currently queries FeatureEndpointMap. On 2026-10-23, database inspection confirmed FeatureRoleMap was absent. With owner approval BE-102 establishes its schema and repeatable seed in scripts/seed-builder-quote.cjs; see docs/BUILDER_QUOTE.md. These public-endpoint records do not alter private endpoint permissions.
 
 ## MVP data policy
 
@@ -105,9 +105,11 @@ Acceptance: unsupported custom types rejected; no client price fallback; finite 
 
 Completed 2026-10-23: checkout rejects unsupported custom types, invalid stored prices/heights, incorrect material categories and malformed builder options. Catalog prices come only from the database; builder prices are recalculated and must match exactly (the Tk 1 tolerance is removed). Fulfillment metadata is rebuilt from validated options and database products. Bounded quantities and carts are enforced. Regression coverage: 364 passing tests across 17 suites. See TESTING.md for limits and verification boundaries. No new endpoints or permission seeds were needed.
 
-### BE-102 - P0 - Validate before adding to cart (TODO)
+### BE-102 - P0 - Validate before adding to cart (COMPLETE)
 
 Add a public rate-limited quote/validate endpoint for structured builder inputs. Reuse the same calculator at checkout. Return authoritative price, normalized options and breakdown; never trust a quote echoed from the browser without checkout verification. Coordinate CLIENT-101. Acceptance: changing client price or bypassing cart cannot lower the accepted order price.
+
+Completed 2026-10-23: POST business/QuoteBuilder reuses checkout validation/calculation, returns normalized material metadata and per-unit breakdown, and does not create orders. Checkout rereads current products and rejects altered or stale prices. Both permission collections seeded and replay verified (five records each), including the owner-approved new FeatureRoleMap schema. Typecheck and 385 regression tests pass. CLIENT-101 remains separate: its exact request/response and UI handling contract is documented in docs/BUILDER_QUOTE.md. No production build or deployment performed.
 
 ### BE-103 - P1 - Units and formula contract (TODO)
 

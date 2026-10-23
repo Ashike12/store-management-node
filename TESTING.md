@@ -19,7 +19,7 @@ Coverage output is ignored by Git: `coverage/lcov-report/index.html`, `coverage/
 - Tests do not load `.env`, import AppModule, connect MongoDB/Redis, or call Google/Gemini. Models, Redis and external fetch are mocked.
 - Multipart upload/download tests use an isolated OS temporary directory and remove only that test directory afterward.
 - The API matrix uses real Nest routing, validation, exception handling and upload middleware with a controlled test auth guard. A separate jwt-http.spec.ts suite exercises real Passport signed JWT verification, expiry, malformed tokens, deleted accounts and permission denial against mocked models.
-- Permission seeds are not modified because no new endpoints are introduced. FeatureEndpointMap behavior is tested with a mocked model. FeatureRoleMap schema and seed execution still need integration verification.
+- BE-102 adds public QuoteBuilder permission seeds and a replay test. The approved manual seed was applied separately to the configured database and verified as five records in each collection after replay. Automated API tests continue to use mocks; this is not full database-backed application testing.
 - Financial and ownership tests exercise real service code with mocked persistence. They do not prove MongoDB transactions, concurrency, indexes or deployment configuration.
 
 ## API inventory
@@ -31,7 +31,7 @@ Coverage output is ignored by Git: `coverage/lcov-report/index.html`, `coverage/
 | App (1) | GET `/` |
 | Auth (5) | POST `/auth/signup`, `/auth/token`, `/auth/refresh`, `/auth/setPassword`, `/auth/getloginlog` |
 | User (9) | GET `/user/get`, `/user/me`, `/user/getById/:id`; POST `/user/getByEmail`, `/user/createCustomer`, `/user/update`, `/user/update-profile`, `/user/change-password`, `/user/delete` |
-| Business (13) | POST `/business/GetProducts`, `/business/GetClientProducts`, `/business/CreateClientOrder`, `/business/CreateProduct`, `/business/UpdateProduct`, `/business/DeleteProduct`, `/business/CreateInvoice`, `/business/UpdateInvoice`, `/business/GetInvoice`, `/business/DeleteInvoice`, `/business/GetDashboardData`, `/business/AddProduction`, `/business/GenerateAiSuggestion` |
+| Business (14) | POST `/business/QuoteBuilder`, `/business/GetProducts`, `/business/GetClientProducts`, `/business/CreateClientOrder`, `/business/CreateProduct`, `/business/UpdateProduct`, `/business/DeleteProduct`, `/business/CreateInvoice`, `/business/UpdateInvoice`, `/business/GetInvoice`, `/business/DeleteInvoice`, `/business/GetDashboardData`, `/business/AddProduction`, `/business/GenerateAiSuggestion` |
 | Storage (5) | POST `/storage/uploadFile`; GET `/storage/getFiles`, `/storage/getFilesByUser/:userId`, `/storage/getFile/:fileId`, `/storage/deleteFile/:fileId` |
 
 ## Focused service coverage
@@ -49,11 +49,11 @@ Coverage output is ignored by Git: `coverage/lcov-report/index.html`, `coverage/
 
 ## Recorded result
 
-`npm run test:cov -- --runInBand --silent`: 17 suites, 364 tests passed. The previous baseline was 193 tests and 61.88% line coverage.
+`npm run test:cov -- --runInBand --silent`: 18 suites, 385 tests passed. The previous baseline was 193 tests and 61.88% line coverage.
 
 | Scope | Statements | Branches | Functions | Lines |
 | --- | --- | --- | --- | --- |
-| Entire source (Nest 12 / updated tooling) | 87% | 84.86% | 91.47% | 87.26% |
+| Entire source (Nest 12 / updated tooling) | 87.24% | 85.15% | 91.71% | 87.49% |
 | All five controllers | 100% | Not all branches covered | 100% | 100% |
 
 Jest 30.5.2, ts-jest 29.4.15 and TypeScript 6.0.3 replace the previously incompatible transformer/compiler pairing. Test scripts now enable VM modules for Nest 12's ESM dependencies; Node 24.22.1 and 26.0.0 passed the suite. The Node VM-module experimental warning is expected. Use `npm run typecheck` for the separate no-output application type check.
@@ -85,3 +85,10 @@ Add its explicit HTTP matrix entry, valid/invalid/unauthorized cases, service be
 - Safety ceilings in order-validation.constant.ts: 100 cart lines, quantity 1-1000 (integer), measurements 1-1200 inches, unit price at most Tk 10,000,000. These are checkout safety limits, not stock availability guarantees.
 - DTO and real-service tests cover invalid prices, quantities, flags, materials, numeric formats, metadata forgery and unknown custom types. All persistence and external verification remain mocked; no live database, Redis or production build is used.
 - Existing endpoints only: no FeatureEndpointMap or FeatureRoleMap additions required. The separate pre-cart quote endpoint remains BE-102.
+
+## BE-102 quote verification
+
+- Quote and checkout share the same parser/calculator and normalized output; valid quotes cause no CAPTCHA calls or order writes.
+- Tests cover unsupported builders, malformed options, bounded integer quantity, forged totals, price changes after quoting, HTTP DTO rejection and rate-limit 429 responses. Existing direct-checkout tampering tests ensure skipping the quote cannot bypass pricing.
+- Permission seed replay is tested in memory, and its approved manual application/replay was verified against the configured database (five records in each mapping collection). No customer/order/product data was modified.
+- Contract and CLIENT-101 handoff: [BUILDER_QUOTE.md](docs/BUILDER_QUOTE.md). Client integration is not implemented in this backend task.
