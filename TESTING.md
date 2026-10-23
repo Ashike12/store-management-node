@@ -49,18 +49,18 @@ Coverage output is ignored by Git: `coverage/lcov-report/index.html`, `coverage/
 
 ## Recorded result
 
-`npm run test:cov -- --runInBand --silent`: 16 suites, 293 tests passed. The previous baseline was 193 tests and 61.88% line coverage.
+`npm run test:cov -- --runInBand --silent`: 17 suites, 364 tests passed. The previous baseline was 193 tests and 61.88% line coverage.
 
 | Scope | Statements | Branches | Functions | Lines |
 | --- | --- | --- | --- | --- |
-| Entire source (Nest 12 / updated tooling) | 86.62% | 81.84% | 91.42% | 86.86% |
+| Entire source (Nest 12 / updated tooling) | 87% | 84.86% | 91.47% | 87.26% |
 | All five controllers | 100% | Not all branches covered | 100% | 100% |
 
 Jest 30.5.2, ts-jest 29.4.15 and TypeScript 6.0.3 replace the previously incompatible transformer/compiler pairing. Test scripts now enable VM modules for Nest 12's ESM dependencies; Node 24.22.1 and 26.0.0 passed the suite. The Node VM-module experimental warning is expected. Use `npm run typecheck` for the separate no-output application type check.
 
 ## Findings and remaining migration gates
 
-Do not interpret passing characterization tests as approval of existing unsafe behavior. The only runtime fix in the continuation is explicit admin membership checking in UserService.updateById/deleteById. Regression tests first reproduced 14 failing authorization cases, then passed after this fix. No API routes or permission seeds changed.
+Do not interpret passing characterization tests as approval of existing unsafe behavior. The earlier baseline runtime fix was explicit admin membership checking in UserService.updateById/deleteById. Regression tests first reproduced 14 failing authorization cases, then passed after this fix. No API routes or permission seeds changed.
 
 1. `user/getById`, `storage/getFilesByUser`, `storage/getFile`, and destructive GET `storage/deleteFile` currently lack authentication guards. Decide intended access, then add regression tests requiring that policy and permission seeds before exposing real data.
 2. Stacked `@Post` decorators currently register only the hyphenated profile/password routes. The camelCase names are not additional registered aliases. Use route arrays if both names are intended, with tests and permission entries for both.
@@ -70,8 +70,18 @@ Do not interpret passing characterization tests as approval of existing unsafe b
 6. Add isolated disposable-database integration tests for actual permissions/seed replay, Mongo queries and transactions, Redis expiry and concurrent writes. Signed JWT rejection is now tested without a database. Never point integration tests at a live `.env` database by default.
 7. Verify bootstrapping, CORS and Vercel smoke behavior after migration. Production builds remain opt-in at the owner's request.
 8. Dashboard getTotalDueAmount currently contributes PaymentAmount minus PaymentAmount (zero) for due-payment invoices, so it does not reduce prior outstanding dues. Add a real aggregation regression for an unpaid sale followed by a due payment, and correct the balance independently of revenue/profit reporting policy.
-9. Custom checkout still accepts unrecognized custom-product types with client-supplied prices, and builder material categories are not enforced. Positive catalog-price fallback can also trust the submitted price when stored prices are absent. Existing tests of valid builder pricing do not resolve these bypasses.
+9. FIXED (BE-101): unknown custom types, client-price fallback, malformed builder options and mismatched material categories are rejected. Fulfillment metadata is rebuilt server-side. Adversarial regression tests cover these paths.
 
 ## Adding an API
 
 Add its explicit HTTP matrix entry, valid/invalid/unauthorized cases, service behavior tests and ownership cases where applicable. Update FeatureEndpointMap and FeatureRoleMap seeds as required by IMPLEMENTATION_PLAN.md. Run tests and coverage, record any remaining gaps, and do not mark a feature complete based on controller coverage alone.
+
+## BE-101 checkout validation contract
+
+- Catalog price is the stored discounted price, or regular price only when the discounted price is absent. Zero, negative, non-finite, string or excessive stored prices are rejected, never replaced with a client price.
+- Only the mosquito-net custom builder is supported. Its submitted price must exactly match the rounded server calculation; the previous Tk 1 tolerance is removed.
+- Material categories/subcategories and both net heights are validated. Net height remains stored in feet and converted to inches. Existing pricing formulas are unchanged.
+- Builder options require strings, explicit true/false flags, decimal measurements and allowlisted styles. Kuchi count is an integer 4-10, gap is an integer 2-12. Unknown fulfillment metadata is discarded; names and images come from database products.
+- Safety ceilings in order-validation.constant.ts: 100 cart lines, quantity 1-1000 (integer), measurements 1-1200 inches, unit price at most Tk 10,000,000. These are checkout safety limits, not stock availability guarantees.
+- DTO and real-service tests cover invalid prices, quantities, flags, materials, numeric formats, metadata forgery and unknown custom types. All persistence and external verification remain mocked; no live database, Redis or production build is used.
+- Existing endpoints only: no FeatureEndpointMap or FeatureRoleMap additions required. The separate pre-cart quote endpoint remains BE-102.

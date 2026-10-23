@@ -133,4 +133,55 @@ describe('ClientOrderService with mocked CAPTCHA and database', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(orders.create).not.toHaveBeenCalled();
   });
+
+  it.each([undefined, 0, -1, NaN, Infinity, '200', 10000001])(
+    'rejects invalid catalog price %s without client fallback',
+    async (price) => {
+      products.find.mockResolvedValue([
+        { _id: 'net', EndUserDiscountedPrice: price },
+      ]);
+      await expect(service.createOrder(dto)).rejects.toMatchObject({
+        status: 400,
+      });
+      expect(orders.create).not.toHaveBeenCalled();
+    },
+  );
+  it('uses regular database price only when discount price is absent', async () => {
+    products.find.mockResolvedValue([{ _id: 'net', EndUserPrice: 250 }]);
+    await service.createOrder(dto);
+    expect(orders.create.mock.calls[0][0].Items[0].UnitPrice).toBe(250);
+  });
+  it.each([1.5, 1001, '2', Infinity])(
+    'rejects non-integer or unbounded quantity %s',
+    async (Quantity) => {
+      await expect(
+        service.createOrder({ ...dto, Items: [{ ...dto.Items[0], Quantity }] }),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(orders.create).not.toHaveBeenCalled();
+    },
+  );
+  it('strips arbitrary catalog fulfillment options and submitted images', async () => {
+    await service.createOrder({
+      ...dto,
+      Items: [
+        {
+          ...dto.Items[0],
+          CustomOptions: { material: 'fake' },
+          ImageLinks: ['https://attacker.invalid'],
+        },
+      ],
+    });
+    expect(orders.create.mock.calls[0][0].Items[0]).toEqual(
+      expect.objectContaining({ CustomOptions: {}, ImageLinks: [] }),
+    );
+  });
+  it.each([[[]], [Array(101).fill(dto.Items[0])]])(
+    'rejects empty or oversized carts',
+    async (Items) => {
+      await expect(
+        service.createOrder({ ...dto, Items }),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(orders.create).not.toHaveBeenCalled();
+    },
+  );
 });

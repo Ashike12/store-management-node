@@ -5,11 +5,43 @@ describe('Custom mosquito net server pricing through checkout', () => {
   const orders = { create: jest.fn() };
   let service: ClientOrderService;
   const catalog = [
-    { _id: 'yard', NetHeight: '5', EndUserDiscountedPrice: 36 },
-    { _id: 'topper', NetHeight: '6', EndUserDiscountedPrice: 72 },
-    { _id: 'cloth', EndUserDiscountedPrice: 36 },
-    { _id: 'fita', EndUserDiscountedPrice: 50 },
-    { _id: 'thread', EndUserDiscountedPrice: 20 },
+    {
+      _id: 'yard',
+      Category: 'MosquitoNetYard',
+      SubCategory: 'Bonafide',
+      ProductName: 'yard',
+      NetHeight: '5',
+      EndUserDiscountedPrice: 36,
+    },
+    {
+      _id: 'topper',
+      Category: 'MosquitoNetYard',
+      SubCategory: 'Shaha',
+      ProductName: 'topper',
+      NetHeight: '6',
+      EndUserDiscountedPrice: 72,
+    },
+    {
+      _id: 'cloth',
+      Category: 'Others',
+      SubCategory: 'MosquitoNetBelowCloth',
+      ProductName: 'cloth',
+      EndUserDiscountedPrice: 36,
+    },
+    {
+      _id: 'fita',
+      Category: 'Others',
+      SubCategory: 'Fita',
+      ProductName: 'fita',
+      EndUserDiscountedPrice: 50,
+    },
+    {
+      _id: 'thread',
+      Category: 'Others',
+      SubCategory: 'SutarBobin',
+      ProductName: 'thread',
+      EndUserDiscountedPrice: 20,
+    },
   ];
   const options = {
     LeftWidthInch: '72',
@@ -56,12 +88,10 @@ describe('Custom mosquito net server pricing through checkout', () => {
   beforeEach(() => {
     products.find.mockReset().mockResolvedValue(catalog);
     orders.create.mockReset();
-    jest
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue({
-        ok: true,
-        json: async () => ({ success: true }),
-      } as any);
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true }),
+    } as any);
     service = new ClientOrderService(
       { getUid: () => 'order-1' } as any,
       {
@@ -116,15 +146,17 @@ describe('Custom mosquito net server pricing through checkout', () => {
   it.each([0, 1, 860, 900])(
     'rejects a tampered price %s without creating an order',
     async (price) => {
-      await expect(service.createOrder(dto({}, price))).rejects.toThrow(
-        'price validation failed',
-      );
+      await expect(service.createOrder(dto({}, price))).rejects.toMatchObject({
+        status: 400,
+      });
       expect(orders.create).not.toHaveBeenCalled();
     },
   );
-  it('normalizes accepted rounding tolerance to the server price', async () => {
-    await service.createOrder(dto({}, 863));
-    expect(savedItem().UnitPrice).toBe(864);
+  it('rejects a one taka submitted price difference', async () => {
+    await expect(service.createOrder(dto({}, 863))).rejects.toMatchObject({
+      status: 400,
+    });
+    expect(orders.create).not.toHaveBeenCalled();
   });
   it.each([
     { LeftWidthInch: '' },
@@ -169,4 +201,111 @@ describe('Custom mosquito net server pricing through checkout', () => {
       );
     },
   );
+
+  it.each(['custom-window-net-1', 'custom-unknown-1'])(
+    'rejects unsupported custom ID %s even with mosquito marker',
+    async (id) => {
+      const input = dto({ BuildCalculationType: 'MosquitoNet' });
+      input.Items[0].ProductId = id;
+      await expect(service.createOrder(input)).rejects.toMatchObject({
+        status: 400,
+      });
+      expect(orders.create).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    { IncludeBelowCloth: 'yes' },
+    { IncludeTopperNet: true },
+    { LeftWidthInch: 72 },
+    { LeftWidthInch: {} },
+    { LeftWidthInch: '0x48' },
+    { LeftWidthInch: '1e2' },
+    { LeftWidthInch: '1201' },
+    { FitaStyle: '1:1:999' },
+    { FitaStyle: '0.5:1' },
+    { FitaStyle: '99:1' },
+    { KuchiCount: '3' },
+    { KuchiCount: '11' },
+    { KuchiCount: '4.5' },
+    { KuchiGapInch: '1' },
+    { KuchiGapInch: '13' },
+    { KuchiGapInch: '2.5' },
+    { BuildCalculationType: 'WindowNet' },
+    { BuildType: 'Window Net' },
+  ])('rejects malformed or forbidden builder setting %j', async (overrides) => {
+    await expect(service.createOrder(dto(overrides))).rejects.toMatchObject({
+      status: 400,
+    });
+    expect(orders.create).not.toHaveBeenCalled();
+  });
+  it.each(['yard', 'topper', 'cloth', 'fita', 'thread'])(
+    'rejects wrong material category for %s',
+    async (id) => {
+      products.find.mockResolvedValue(
+        catalog.map((p) =>
+          p._id === id
+            ? { ...p, Category: 'MosquitoNet', SubCategory: 'Double' }
+            : p,
+        ),
+      );
+      await expect(
+        service.createOrder(
+          dto({
+            IncludeTopperNet: 'true',
+            TopperNetYardId: 'topper',
+            IncludeBelowCloth: 'true',
+            BelowClothId: 'cloth',
+          }),
+        ),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(orders.create).not.toHaveBeenCalled();
+    },
+  );
+  it.each([undefined, '', '0', '-1', 'Infinity', 'NaN', '1e2', '101'])(
+    'rejects invalid database net height %s',
+    async (NetHeight) => {
+      products.find.mockResolvedValue(
+        catalog.map((p) => (p._id === 'yard' ? { ...p, NetHeight } : p)),
+      );
+      await expect(service.createOrder(dto())).rejects.toMatchObject({
+        status: 400,
+      });
+      expect(orders.create).not.toHaveBeenCalled();
+    },
+  );
+  it.each([undefined, 0, -1, NaN, Infinity, '36', 10000001])(
+    'rejects invalid material price %s',
+    async (price) => {
+      products.find.mockResolvedValue(
+        catalog.map((p) =>
+          p._id === 'fita' ? { ...p, EndUserDiscountedPrice: price } : p,
+        ),
+      );
+      await expect(service.createOrder(dto())).rejects.toMatchObject({
+        status: 400,
+      });
+      expect(orders.create).not.toHaveBeenCalled();
+    },
+  );
+  it('rebuilds fulfillment details instead of trusting submitted display metadata', async () => {
+    const input = dto({
+      LeftWidth: '999 inch',
+      MosquitoNetYard: 'Expensive fabric',
+      AdminInstruction: 'free extras',
+      ServerCalculatedPrice: '1',
+    });
+    input.Items[0].ImageLinks = ['https://attacker.invalid/fake'];
+    input.Items[0].ProductName = 'Fake';
+    await service.createOrder(input);
+    expect(savedItem().ProductName).toBe('Custom Mosquito Net');
+    expect(savedItem().ImageLinks).toEqual([]);
+    expect(savedItem().CustomOptions).toEqual(
+      expect.objectContaining({
+        LeftWidth: '72 inch',
+        MosquitoNetYard: 'yard',
+        ServerCalculatedPrice: '864',
+      }),
+    );
+    expect(savedItem().CustomOptions).not.toHaveProperty('AdminInstruction');
+  });
 });
