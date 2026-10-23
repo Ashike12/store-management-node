@@ -5,7 +5,7 @@
   "author": "",
   "private": true,
   "engines": {
-    "node": ">=20 <25"
+    "node": "^24.15.0 || ^26.0.0"
   },
   "license": "UNLICENSED",
   "scripts": {
@@ -14,32 +14,33 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "node dist/src/main.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:cov": "jest --coverage",
-    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
+    "test:cov": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
+    "test:debug": "node --inspect-brk --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
+    "test:e2e": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./test/jest-e2e.json",
+    "typecheck": "tsc --noEmit --incremental false"
   },
   "dependencies": {
-    "@nestjs/common": "11.1.24",
-    "@nestjs/config": "4.0.4",
-    "@nestjs/core": "11.1.24",
-    "@nestjs/jwt": "11.0.2",
-    "@nestjs/mongoose": "11.0.4",
-    "@nestjs/passport": "11.0.5",
-    "@nestjs/platform-express": "11.1.24",
+    "@nestjs/common": "12.2.0",
+    "@nestjs/config": "12.0.1",
+    "@nestjs/core": "12.2.0",
+    "@nestjs/jwt": "12.0.3",
+    "@nestjs/mongoose": "12.0.0",
+    "@nestjs/passport": "12.0.0",
+    "@nestjs/platform-express": "12.2.0",
     "bcryptjs": "2.4.3",
     "class-transformer": "0.5.1",
     "class-validator": "0.14.0",
     "date-fns": "^4.1.0",
     "dotenv": "16.4.5",
-    "express": "4.21.1",
+    "express": "5.3.0",
     "ioredis": "5.4.1",
     "lodash": "^4.17.21",
-    "mongoose": "9.6.2",
-    "multer": "1.4.5-lts.1",
+    "mongoose": "9.11.3",
+    "multer": "2.5.0",
     "nodemailer": "6.9.15",
     "passport": "0.6.0",
     "passport-jwt": "4.0.1",
@@ -49,13 +50,13 @@
     "uuid": "9.0.1"
   },
   "devDependencies": {
-    "@nestjs/cli": "11.0.21",
-    "@nestjs/schematics": "11.1.0",
-    "@nestjs/testing": "11.1.24",
-    "@types/express": "4.17.13",
-    "@types/jest": "29.2.4",
-    "@types/multer": "1.4.12",
-    "@types/node": "22.16.5",
+    "@nestjs/cli": "12.0.10",
+    "@nestjs/schematics": "12.0.10",
+    "@nestjs/testing": "12.2.0",
+    "@types/express": "5.0.6",
+    "@types/jest": "30.0.0",
+    "@types/multer": "2.3.0",
+    "@types/node": "24.19.2",
     "@types/passport-local": "1.0.35",
     "@types/supertest": "2.0.11",
     "@typescript-eslint/eslint-plugin": "5.0.0",
@@ -63,16 +64,16 @@
     "eslint": "8.0.1",
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-prettier": "5.5.4",
-    "jest": "29.3.1",
+    "jest": "30.5.2",
     "nodemon": "3.1.4",
     "prettier": "3.6.2",
     "source-map-support": "0.5.20",
     "supertest": "6.1.3",
-    "ts-jest": "29.0.3",
-    "ts-loader": "9.2.3",
+    "ts-jest": "29.4.15",
+    "ts-loader": "9.6.2",
     "ts-node": "10.9.2",
     "tsconfig-paths": "4.1.1",
-    "typescript": "5.9.3"
+    "typescript": "6.0.3"
   },
   "jest": {
     "moduleFileExtensions": [
@@ -83,12 +84,28 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.(t|j)s$": [
+        "ts-jest",
+        {
+          "tsconfig": "<rootDir>/../tsconfig.spec.json"
+        }
+      ]
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "json-summary"
+    ],
+    "coverageThreshold": {
+      "./**/*.controller.ts": {
+        "lines": 100,
+        "functions": 100
+      }
+    }
   }
 }
