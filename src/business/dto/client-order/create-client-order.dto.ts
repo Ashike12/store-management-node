@@ -1,6 +1,10 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
+  ArrayMaxSize,
+  IsInt,
+  Min,
+  Max,
   IsArray,
   IsIn,
   IsNotEmpty,
@@ -10,6 +14,7 @@ import {
   IsString,
   ValidateNested,
 } from 'class-validator';
+import { ORDER_LIMITS } from '../../../shared/constant/order-validation.constant';
 
 export class CreateClientOrderItemDto {
   @IsString()
@@ -33,9 +38,13 @@ export class CreateClientOrderItemDto {
   readonly ImageLinks: string[];
 
   @IsNumber()
+  @Min(0.01)
+  @Max(ORDER_LIMITS.unitPrice)
   readonly UnitPrice: number;
 
-  @IsNumber()
+  @IsInt()
+  @Min(1)
+  @Max(ORDER_LIMITS.quantity)
   readonly Quantity: number;
 
   @IsOptional()
@@ -90,6 +99,7 @@ export class CreateClientOrderDto {
 
   @IsArray()
   @ArrayMinSize(1)
+  @ArrayMaxSize(ORDER_LIMITS.items)
   @ValidateNested({ each: true })
   @Type(() => CreateClientOrderItemDto)
   readonly Items: CreateClientOrderItemDto[];

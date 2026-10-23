@@ -97,11 +97,13 @@ Frontend mirror: client src/pages/BuildYourOwn.tsx. Backend authority currently 
 
 ## Prioritized next work
 
-### BE-101 - P0 - Close price-validation bypasses (TODO)
+### BE-101 - P0 - Close price-validation bypasses (COMPLETE)
 
 Current normalizeCustomItem accepts unknown custom-* items using client UnitPrice. Catalog pricing also falls back to client UnitPrice when stored prices are falsy. Builder product lookup checks existence but not category/subcategory; Fita ratios and Kuchi settings lack the UI's full allowed-value checks. These mean prior claims of complete tamper protection were too broad.
 
 Acceptance: unsupported custom types rejected; no client price fallback; finite valid database prices and net height required; correct material categories enforced; strict string/boolean/numeric schemas; allowed styles/ranges enforced; quantities bounded positive integers; no fabricated product metadata accepted as fulfillment instructions. Add adversarial tests for each path. Document or remove the current Tk 1 submitted-price tolerance.
+
+Completed 2026-10-23: checkout rejects unsupported custom types, invalid stored prices/heights, incorrect material categories and malformed builder options. Catalog prices come only from the database; builder prices are recalculated and must match exactly (the Tk 1 tolerance is removed). Fulfillment metadata is rebuilt from validated options and database products. Bounded quantities and carts are enforced. Regression coverage: 364 passing tests across 17 suites. See TESTING.md for limits and verification boundaries. No new endpoints or permission seeds were needed.
 
 ### BE-102 - P0 - Validate before adding to cart (TODO)
 
