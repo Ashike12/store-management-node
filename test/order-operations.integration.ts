@@ -174,4 +174,31 @@ describe('order operations on an isolated local replica set', () => {
       orders.create({ _id: 'two', RequestId: 'one', RequestHash: 'one' }),
     ).rejects.toMatchObject({ code: 11000 });
   });
+
+  it('queues manual orders for follow-up and clears only after successful admin action', async () => {
+    await create('confirm');
+    await create('cancel');
+    await create('no-stock', 100);
+    expect(
+      (await service.list({ Page: 1, Size: 10, NeedsAction: true }, admin))
+        .TotalCount,
+    ).toBe(3);
+    await transition('confirm', 'confirmed');
+    await transition('cancel', 'cancelled');
+    await expect(transition('no-stock', 'confirmed')).rejects.toMatchObject({
+      status: 409,
+    });
+    const remaining = await service.list(
+      { Page: 1, Size: 10, NeedsAction: true },
+      admin,
+    );
+    expect(remaining.TotalCount).toBe(1);
+    expect(remaining.Data[0]._id).toBe('no-stock');
+    expect((await orders.findById('confirm')).PaymentStatus).toBe('unpaid');
+    expect((await orders.findById('confirm')).PaymentHandling).toBe('manual');
+    expect(
+      (await service.list({ Page: 1, Size: 10, NeedsAction: false }, admin))
+        .TotalCount,
+    ).toBe(2);
+  });
 });

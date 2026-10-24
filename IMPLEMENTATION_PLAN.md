@@ -123,9 +123,11 @@ Add authorized paginated order listing/details, fulfillment transitions, cancell
 
 Completed 2026-10-23: admin-only ListOrders/GetOrder/TransitionOrder APIs, separate unpaid payment status, versioned transitions and append-only audit. Owner selected deduction on confirmation, not checkout. Confirmation/cancellation use transactions, conditional stock updates and stored material snapshots. UUID request-ID uniqueness prevents checkout retry duplicates. Both permission maps and indexes were seeded/replayed. Eight isolated local replica-set integration tests verify concurrency, rollback, cancellation, access and pagination. ADMIN-102 UI and BE-106 invoice inventory consistency remain separate work. See docs/UNITS_AND_ORDERS.md.
 
-### BE-105 - P1 - Payments (DECISION)
+### BE-105 - P1 - Manual order handling (COMPLETE)
 
-Choose gateway versus manual verification and obtain merchant configuration. Implement server-created payment sessions using verified totals, transaction records, provider verification, idempotent callbacks, amount/currency/order matching and retry/failure/refund handling. Secrets backend-only. Coordinate CLIENT-104 and ADMIN-103. No provider choice is approved by this document.
+Final owner decision (2026-10-24): no payment-method selection or online payment during order placement. A valid Bangladesh mobile number is mandatory. Explain that a salesperson will contact the customer, delivery charges may be requested in advance, and products may be sent cash on delivery. Handle collection and agreement manually; do not mark orders paid automatically. New orders require immediate admin follow-up. Coordinate CLIENT-104 messaging and admin follow-up UI using existing order endpoints. Gateway sessions, wallet integrations and automated payment callbacks are not part of this business workflow.
+
+Implemented 2026-10-24: mandatory normalized Bangladesh mobile number, fixed manual/unpaid order fields and immediate-action queue flag. Existing ListOrders supports NeedsAction; successful admin transitions clear the flag transactionally. Backend verification: 431 tests, 158 HTTP contract tests, 9 isolated Mongo integration tests and typecheck passed. No new endpoint/permission mappings or merchant configuration required. See docs/MANUAL_ORDER_WORKFLOW.md for the final decision and frontend handoff.
 
 ### BE-106 - P1 - Invoice consistency and access tests (TODO)
 

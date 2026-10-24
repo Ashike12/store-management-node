@@ -103,3 +103,12 @@ Add its explicit HTTP matrix entry, valid/invalid/unauthorized cases, service be
 - Client no-output typecheck and retry-ID tests pass. Admin typecheck reports existing unrelated CustomButton/unused-variable errors; the admin change is limited to height-label strings. No production builds run.
 
 Final BE-103/104 run: 412 unit/contract tests (19 suites), 150 HTTP matrix tests via test:e2e, and 8 separate local Mongo integration tests passed. Coverage above excludes the separately executed integration suite, so order-operations service coverage is not reflected there. Backend/client no-output typechecks passed.
+
+## BE-105 manual-order verification (2026-10-24)
+
+- Backend: 431 tests across 19 suites passed; 158 HTTP contract tests passed; typecheck passed.
+- Nine separate local MongoDB replica-set integration tests passed, including follow-up filtering/clearing and preserving the flag when stock confirmation fails.
+- New cases cover mandatory/normalized phone input, equivalent retry identity, ignored forged payment fields, and boolean NeedsAction validation.
+- Client: 38 focused mocked checkout/phone tests passed (41 tests across the full suite), and the no-output TypeScript check passed. Admin: 25 mocked UI/API tests and changed-file lint passed; its full typecheck still reports only pre-existing unrelated errors.
+- Existing permission maps are unchanged: no new route or broader access is introduced. No hosted order, payment, CAPTCHA or notification was created during testing.
+- Manual workflow and limits: docs/MANUAL_ORDER_WORKFLOW.md.

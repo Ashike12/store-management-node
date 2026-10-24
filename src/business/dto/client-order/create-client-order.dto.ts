@@ -1,8 +1,13 @@
-import { Type } from 'class-transformer';
+import {
+  BD_MOBILE_PATTERN,
+  normalizeOrderPhone,
+} from '../../../shared/constant/order-payment.constant';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMinSize,
   ArrayMaxSize,
   IsInt,
+  Matches,
   IsUUID,
   Min,
   Max,
@@ -63,6 +68,11 @@ export class CreateClientOrderDto {
 
   @IsString()
   @IsNotEmpty()
+  @Transform(({ value }) => normalizeOrderPhone(value))
+  @Matches(BD_MOBILE_PATTERN, {
+    message:
+      'A valid Bangladesh mobile number is required so our sales team can contact you',
+  })
   readonly PhoneNumber: string;
 
   @IsString()
