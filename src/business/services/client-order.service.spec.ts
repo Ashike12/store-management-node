@@ -220,4 +220,60 @@ describe('ClientOrderService with mocked CAPTCHA and database', () => {
     const result = await service.createOrder(dto);
     expect(result.Data.OrderId).toBe(saved._id);
   });
+
+  it('creates a manual unpaid order requiring immediate follow-up even if a client claims paid', async () => {
+    const response = await service.createOrder({
+      ...dto,
+      PhoneNumber: '+880 1700-000000',
+      PaymentStatus: 'paid',
+      PaymentHandling: 'online',
+      RequiresImmediateAction: false,
+    });
+    expect(orders.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        PhoneNumber: '01700000000',
+        PaymentStatus: 'unpaid',
+        PaymentHandling: 'manual',
+        RequiresImmediateAction: true,
+      }),
+    );
+    expect(response.Data).toMatchObject({
+      PaymentHandling: 'manual',
+      ContactRequired: true,
+    });
+  });
+  it.each([
+    '',
+    '   ',
+    '12345',
+    '01200000000',
+    '017000000000',
+    '017abcdefgh',
+    '+441234567890',
+    null,
+    undefined,
+  ])(
+    'rejects an invalid contact phone %j before CAPTCHA or persistence',
+    async (PhoneNumber) => {
+      await expect(
+        service.createOrder({ ...dto, PhoneNumber }),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(orders.create).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+  it('treats equivalent phone formats as the same retry and does not queue a duplicate alert', async () => {
+    await service.createOrder({ ...dto, PhoneNumber: '+8801700000000' });
+    const saved = orders.create.mock.calls[0][0];
+    orders.findOne.mockResolvedValue(saved);
+    const replay = await service.createOrder({
+      ...dto,
+      PhoneNumber: '01700000000',
+    });
+    expect(orders.create).toHaveBeenCalledTimes(1);
+    expect(replay.Data).toMatchObject({
+      PaymentHandling: 'manual',
+      ContactRequired: true,
+    });
+  });
 });

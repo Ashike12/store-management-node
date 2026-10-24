@@ -667,4 +667,38 @@ describe('API HTTP contracts (services mocked; no live infrastructure)', () => {
       'customer-1',
     );
   });
+
+  it.each(['', '   ', '123', '01200000000', '017000000000', 1700000000])(
+    'rejects invalid checkout contact phone %j',
+    async (PhoneNumber) => {
+      await request(app.getHttpServer())
+        .post('/business/CreateClientOrder')
+        .send({ ...order, PhoneNumber })
+        .expect(400);
+      expect(mocks.get(ClientOrderService).createOrder).not.toHaveBeenCalled();
+    },
+  );
+  it('accepts a formatted Bangladesh mobile number without payment selection', async () => {
+    await request(app.getHttpServer())
+      .post('/business/CreateClientOrder')
+      .send({ ...order, PhoneNumber: '+880 1700-000000' })
+      .expect(200);
+    expect(mocks.get(ClientOrderService).createOrder).toHaveBeenCalled();
+  });
+  it('accepts only boolean NeedsAction filters', async () => {
+    await request(app.getHttpServer())
+      .post('/business/ListOrders')
+      .set('Authorization', 'Bearer admin')
+      .send({ NeedsAction: 'true' })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/business/ListOrders')
+      .set('Authorization', 'Bearer admin')
+      .send({ NeedsAction: true })
+      .expect(200);
+    expect(mocks.get(OrderOperationsService).list).toHaveBeenCalledWith(
+      expect.objectContaining({ NeedsAction: true }),
+      user,
+    );
+  });
 });

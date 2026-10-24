@@ -1,5 +1,6 @@
 import {
   IsDateString,
+  IsBoolean,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -20,6 +21,7 @@ export const ORDER_STATUSES = [
 ];
 
 export class ListOrdersDto {
+  @IsOptional() @IsBoolean() NeedsAction?: boolean;
   @IsInt() @Min(1) Page = 1;
   @IsInt() @Min(1) @Max(100) Size = 10;
   @IsOptional() @IsIn(ORDER_STATUSES) Status?: string;

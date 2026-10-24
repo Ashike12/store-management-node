@@ -51,6 +51,8 @@ export class OrderOperationsService {
       throw new BadRequestException('Invalid date range');
     const filter: Record<string, unknown> = {};
     if (dto.Status) filter.OrderStatus = dto.Status;
+    if (dto.NeedsAction !== undefined)
+      filter.RequiresImmediateAction = dto.NeedsAction;
     if (dto.From || dto.To)
       filter.CreatedDate = {
         ...(dto.From ? { $gte: new Date(dto.From).toISOString() } : {}),
@@ -161,6 +163,7 @@ export class OrderOperationsService {
           {
             $set: {
               OrderStatus: dto.Status,
+              RequiresImmediateAction: false,
               StockDeducted: confirming
                 ? true
                 : restoring

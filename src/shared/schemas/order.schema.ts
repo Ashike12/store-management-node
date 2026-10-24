@@ -34,6 +34,9 @@ export class OrderItemSnapshot {
   timestamps: true,
 })
 export class Order extends RootSchema {
+  @Prop({ default: 'manual', enum: ['manual'] }) PaymentHandling: string;
+  @Prop({ default: true }) RequiresImmediateAction: boolean;
+
   @Prop({ required: true }) RequestId: string;
   @Prop({ required: true }) RequestHash: string;
   @Prop() FormulaVersion: string;

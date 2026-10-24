@@ -1,3 +1,8 @@
+import {
+  BD_MOBILE_PATTERN,
+  normalizeOrderPhone,
+  ORDER_PAYMENT_HANDLING,
+} from '../../shared/constant/order-payment.constant';
 import { createHash } from 'node:crypto';
 import {
   calculateMosquitoNet,
@@ -145,6 +150,11 @@ export class ClientOrderService {
     dto: CreateClientOrderDto,
     customerIp?: string,
   ): Promise<CommandResponse> {
+    const phoneNumber = normalizeOrderPhone(dto.PhoneNumber);
+    if (!BD_MOBILE_PATTERN.test(phoneNumber))
+      throw new BadRequestException(
+        'A valid Bangladesh mobile number is required so our sales team can contact you',
+      );
     const verifiedCaptcha = await this.verifyCaptcha(
       dto.CaptchaToken,
       customerIp,
@@ -161,7 +171,9 @@ export class ClientOrderService {
             )
           : value;
     const requestHash = createHash('sha256')
-      .update(JSON.stringify(canonical(payload)))
+      .update(
+        JSON.stringify(canonical({ ...payload, PhoneNumber: phoneNumber })),
+      )
       .digest('hex');
     const existing = await this.orderModel.findOne({
       RequestId: dto.RequestId,
@@ -191,6 +203,8 @@ export class ClientOrderService {
         FormulaVersion: FORMULA_VERSION,
         Version: 0,
         PaymentStatus: 'unpaid',
+        PaymentHandling: ORDER_PAYMENT_HANDLING,
+        RequiresImmediateAction: true,
         StockDeducted: false,
         StockMovements: [],
         AuditHistory: [
@@ -210,7 +224,7 @@ export class ClientOrderService {
         RolesAllowedToDelete: [UserRoles.Admin],
         OrderNumber: orderNumber,
         CustomerName: dto.CustomerName.trim(),
-        PhoneNumber: dto.PhoneNumber.trim(),
+        PhoneNumber: phoneNumber,
         Division: division,
         District: district,
         Area: dto.Area.trim(),
@@ -243,6 +257,8 @@ export class ClientOrderService {
       OrderId: orderId,
       OrderNumber: orderNumber,
       TotalAmount: totalAmount,
+      PaymentHandling: ORDER_PAYMENT_HANDLING,
+      ContactRequired: true,
     });
     return response;
   }
@@ -257,6 +273,8 @@ export class ClientOrderService {
       OrderId: order._id,
       OrderNumber: order.OrderNumber,
       TotalAmount: order.TotalAmount,
+      PaymentHandling: ORDER_PAYMENT_HANDLING,
+      ContactRequired: order.RequiresImmediateAction,
     });
     return response;
   }
