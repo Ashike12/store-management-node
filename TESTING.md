@@ -112,3 +112,12 @@ Final BE-103/104 run: 412 unit/contract tests (19 suites), 150 HTTP matrix tests
 - Client: 38 focused mocked checkout/phone tests passed (41 tests across the full suite), and the no-output TypeScript check passed. Admin: 25 mocked UI/API tests and changed-file lint passed; its full typecheck still reports only pre-existing unrelated errors.
 - Existing permission maps are unchanged: no new route or broader access is introduced. No hosted order, payment, CAPTCHA or notification was created during testing.
 - Manual workflow and limits: docs/MANUAL_ORDER_WORKFLOW.md.
+
+## BE-106 invoice consistency verification (2026-10-25)
+
+- Invoice create, update and delete use MongoDB transactions across product stock, product-sale rows and invoice data. Conditional deductions prevent overselling.
+- Strict service and DTO tests cover supported roles, nested numeric validation, safety limits, due-payment shape, wholesaler ownership and bounded pagination.
+- HTTP tests verify admin-only mutations, admin/wholesaler reads, blocked app-user reads/writes, strict unknown-field rejection and service argument propagation.
+- The isolated local replica-set suite covers successful create/edit/delete, rollback on insufficient stock and final-write failure, concurrent sales, product/due conversion, due totals, owner ACL changes, monthly dashboards, duplicate product rows, unique invoice numbers and cross-wholesaler privacy.
+- Final verification: 449 tests across 19 unit/contract suites, 168 HTTP tests, 21 tests across both isolated MongoDB integration suites, and TypeScript typecheck passed. Changed-file ESLint completed with no errors; the repository's existing decorator/strictness warnings remain.
+- Reporting terminology for recovered due remains BE-107. No new endpoint or permission seed was introduced. See docs/INVOICE_CONSISTENCY.md.

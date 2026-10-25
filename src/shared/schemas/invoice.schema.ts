@@ -5,26 +5,31 @@ import { RootSchema } from './root.schema';
   timestamps: true,
 })
 export class Invoice extends RootSchema {
-  @Prop()
+  @Prop({ default: '' })
   WholeSalerId: string;
 
-  @Prop()
+  @Prop({ default: '' })
   WholeSalerName: string;
 
-  @Prop()
+  @Prop({ required: true })
   InvoiceNumber: string;
 
-  @Prop()
+  @Prop({ required: true, min: 0 })
   TotalAmount: number;
 
-  @Prop()
+  @Prop({ required: true, min: 0 })
   PaymentAmount: number;
 
-  @Prop()
+  @Prop({ required: true })
   ProfitMargin: number;
 
-  @Prop()
+  @Prop({
+    required: true,
+    enum: ['WHOLESALE', 'CONSUMER', 'DUE_PAYMENT'],
+  })
   InvoiceType: string;
 }
 
 export const InvoiceSchema = SchemaFactory.createForClass(Invoice);
+InvoiceSchema.index({ InvoiceNumber: 1 }, { unique: true });
+InvoiceSchema.index({ WholeSalerId: 1, CreatedDate: -1, _id: -1 });

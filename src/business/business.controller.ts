@@ -65,6 +65,17 @@ export class BusinessController {
       throw new ForbiddenException('Admin access required');
   }
 
+  private ensureInvoiceReadAccess(user?: User) {
+    if (
+      !user?.Roles?.includes(UserRoles.Admin) &&
+      !user?.Roles?.includes(UserRoles.WholeSaler)
+    ) {
+      throw new ForbiddenException(
+        'Invoice access requires admin or wholesaler',
+      );
+    }
+  }
+
   @Post('ListOrders')
   @HttpCode(200)
   @UseGuards(AuthGuard())
@@ -175,46 +186,78 @@ export class BusinessController {
   @Post('CreateInvoice')
   @HttpCode(200)
   @UseGuards(AuthGuard())
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
   CreateInvoice(
     @Body() dto: CreateInvoiceDto,
     @Req() req: Request,
   ): Promise<CommandResponse> {
-    this.ensureWholesalerReadOnly(req['user'] as User);
-    return this.invoiceService.createInvoice(dto);
+    const user = req['user'] as User;
+    this.ensureAdmin(user);
+    return this.invoiceService.createInvoice(dto, user);
   }
 
   @Post('UpdateInvoice')
   @HttpCode(200)
   @UseGuards(AuthGuard())
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
   UpdateInvoice(
     @Body() dto: UpdateInvoiceDto,
     @Req() req: Request,
   ): Promise<CommandResponse> {
-    this.ensureWholesalerReadOnly(req['user'] as User);
-    return this.invoiceService.updateInvoice(dto);
+    const user = req['user'] as User;
+    this.ensureAdmin(user);
+    return this.invoiceService.updateInvoice(dto, user);
   }
 
   @Post('GetInvoice')
   @HttpCode(200)
   @UseGuards(AuthGuard())
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
   GetInvoice(
     @Query() query: ExpressQuery,
     @Body() dto: GetInvoiceDto,
     @Req() req: Request,
   ): Promise<QueryRespone> {
     const user = req['user'] as User;
+    this.ensureInvoiceReadAccess(user);
     return this.invoiceService.getInvoiceList(query, dto, user);
   }
 
   @Post('DeleteInvoice')
   @HttpCode(200)
   @UseGuards(AuthGuard())
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
   DeleteInvoice(
     @Body() dto: DeleteProductDto,
     @Req() req: Request,
   ): Promise<CommandResponse> {
-    this.ensureWholesalerReadOnly(req['user'] as User);
-    return this.invoiceService.deleteInvoiceById(dto.ItemId);
+    const user = req['user'] as User;
+    this.ensureAdmin(user);
+    return this.invoiceService.deleteInvoiceById(dto.ItemId, user);
   }
 
   @Post('GetDashboardData')
@@ -222,6 +265,7 @@ export class BusinessController {
   @UseGuards(AuthGuard())
   GetDashboardData(@Req() req: Request): Promise<QueryRespone> {
     const user = req['user'] as User;
+    this.ensureInvoiceReadAccess(user);
     return this.invoiceService.getDashboardStatsData(user);
   }
 
