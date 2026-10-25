@@ -55,7 +55,7 @@ Package declarations: NestJS 11.1.24, TypeScript 5.9.3, Mongoose 9.6.2; Node eng
 | BE-004 | IMPLEMENTED | Separate public product response excludes MakingPrice and WholeSalerPrice. |
 | BE-005 | IMPLEMENTED | Product and empty-product due-payment invoices; sales snapshots retain actual negotiated SellingPrice. |
 | BE-006 | IMPLEMENTED | Wholesaler invoice scoping and dashboard branch; profit omitted by response sanitization. Needs regression coverage for cross-wholesaler access. |
-| BE-007 | IMPLEMENTED | Due-payment normalization uses PaymentAmount for TotalAmount and ProfitMargin, per prior business request. Accounting interpretation remains a decision below. |
+| BE-007 | IMPLEMENTED | Due-payment receipts use PaymentAmount for display while BE-107 separates gross profit from realized cash margin. |
 | BE-008 | IMPLEMENTED | Public order creation, CAPTCHA verification, shipping, coupons, persisted order snapshots and pending status. |
 | BE-009 | PARTIAL | Custom mosquito-net recalculation at order submission from MongoDB prices; no cart-validation endpoint exists. Security gaps listed below. |
 | BE-010 | IMPLEMENTED | Gemini description service with Bengali instruction and failure handling; provider availability still external. |
@@ -135,9 +135,11 @@ Test create/edit/delete effects on stock, dues and dashboards; prevent partial m
 
 Completed 2026-10-25: create, edit and delete now update inventory, product-sale rows and invoices in one MongoDB transaction with conditional stock deductions. Edit/delete restore prior stock; due payments cannot contain products and reduce outstanding due without stock writes. Strict numeric, owner-role, pagination and admin/read-role validation now applies in both controller and service. Invoice numbers and common owner/detail lookup paths are indexed. Wholesaler list/detail/dashboard queries are owner-scoped and omit profit/private reporting; admin+wholesaler users retain admin access. Verification passes 449 unit/contract tests, 168 HTTP tests, 21 isolated MongoDB integration tests and typecheck. Existing routes mean permission seed tables are unchanged. See docs/INVOICE_CONSISTENCY.md.
 
-### BE-107 - P1 - Due-payment reporting policy (DECISION)
+### BE-107 - P1 - Due-payment reporting policy (COMPLETE)
 
-Current requested behavior counts recovered dues as profit. Decide how cash received, sales revenue and gross profit should be reported to avoid counting original-sale profit twice. Agree the reporting policy before launch and test it with fresh invoices and due payments; existing test records need not be preserved.
+Use product-sale value minus snapshotted product cost as gross profit. Use all cash received minus product cost as realized cash margin, allowing it to remain negative until collections recover cost. Due-payment receipts increase cash collected and realized cash margin, but contribute zero product cost and zero gross profit. Outstanding due, customer credit and cost at risk are reported independently.
+
+Completed 2026-10-25: invoices and product-sale rows now snapshot making cost; invoice responses expose ProductCostAmount, GrossProfit and RealizedCashMargin instead of the ambiguous ProfitMargin field. Dashboard reporting separates monthly cash collected, gross profit and realized cash margin, plus lifetime outstanding due, customer credit and cost at risk. Filtered invoice lists include an aggregate summary independent of pagination. Wholesaler responses continue to omit cost/profit fields. Real MongoDB integration coverage verifies partial due recovery and no duplicate gross profit. Existing routes are reused, so permission seed tables are unchanged. See docs/DUE_PAYMENT_REPORTING.md.
 
 ### BE-108 - P2 - Maintenance and deployment (TODO)
 

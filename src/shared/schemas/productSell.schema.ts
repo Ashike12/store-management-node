@@ -14,6 +14,9 @@ export class ProductSell extends RootSchema {
   @Prop({ required: true, min: 0 })
   SellingPrice: number;
 
+  @Prop({ required: true, min: 0 })
+  MakingPrice: number;
+
   @Prop({ required: true, min: 0.000001 })
   Quantity: number;
 

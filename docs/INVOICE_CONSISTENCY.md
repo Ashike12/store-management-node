@@ -40,7 +40,7 @@ BE-106 makes the existing invoice endpoints consistent across the `Product`,
   cost-derived values.
 - A wholesaler-only user is always scoped to their own `WholeSalerId`, even if a
   different wholesaler ID or invoice ID is submitted.
-- Wholesaler responses omit `ProfitMargin`, aggregate sales/revenue sections,
+- Wholesaler responses omit product cost, gross profit and realized margin fields,
   and other private business reporting. Product-sale detail rows are scoped by
   both invoice and wholesaler owner.
 - A user carrying both admin and wholesaler roles is treated as an admin.

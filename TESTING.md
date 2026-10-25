@@ -120,4 +120,13 @@ Final BE-103/104 run: 412 unit/contract tests (19 suites), 150 HTTP matrix tests
 - HTTP tests verify admin-only mutations, admin/wholesaler reads, blocked app-user reads/writes, strict unknown-field rejection and service argument propagation.
 - The isolated local replica-set suite covers successful create/edit/delete, rollback on insufficient stock and final-write failure, concurrent sales, product/due conversion, due totals, owner ACL changes, monthly dashboards, duplicate product rows, unique invoice numbers and cross-wholesaler privacy.
 - Final verification: 449 tests across 19 unit/contract suites, 168 HTTP tests, 21 tests across both isolated MongoDB integration suites, and TypeScript typecheck passed. Changed-file ESLint completed with no errors; the repository's existing decorator/strictness warnings remain.
+
+## BE-107 due-payment reporting verification (2026-10-25)
+
+- Product invoices snapshot making cost and report gross profit independently of collection timing.
+- Realized cash margin is payment minus snapshotted cost for product invoices; due receipts contribute their payment to realized margin but zero gross profit.
+- Dashboard aggregation distinguishes monthly cash collected, gross profit and realized cash margin from lifetime outstanding due, customer credit and cost at risk.
+- Filtered invoice summaries aggregate all matching records rather than only the visible page.
+- Wholesaler list, detail and dashboard responses omit private cost and margin fields.
+- Verification: 449 tests across 19 unit/contract suites, 168 HTTP tests, 21 isolated MongoDB integration tests, and TypeScript typecheck passed.
 - Reporting terminology for recovered due remains BE-107. No new endpoint or permission seed was introduced. See docs/INVOICE_CONSISTENCY.md.
