@@ -1,10 +1,14 @@
 import { ClientOrderService } from './client-order.service';
 
 describe('ClientOrderService with mocked CAPTCHA and database', () => {
-  const orders = { create: jest.fn() };
+  const orders = {
+    create: jest.fn(),
+    findOne: jest.fn().mockResolvedValue(null),
+  };
   const products = { find: jest.fn() };
   const config = { get: jest.fn() };
   const dto = {
+    RequestId: '12345678-1234-4123-8123-123456789abc',
     CustomerName: ' Test ',
     PhoneNumber: '01700000000',
     Division: 'Other',
@@ -30,6 +34,7 @@ describe('ClientOrderService with mocked CAPTCHA and database', () => {
   let fetchMock: jest.SpyInstance;
   beforeEach(() => {
     orders.create.mockReset();
+    orders.findOne.mockReset().mockResolvedValue(null);
     products.find
       .mockReset()
       .mockResolvedValue([
@@ -56,6 +61,7 @@ describe('ClientOrderService with mocked CAPTCHA and database', () => {
     await service.createOrder(dto, '127.0.0.1');
     expect(orders.create).toHaveBeenCalledWith(
       expect.objectContaining({
+        RequestId: '12345678-1234-4123-8123-123456789abc',
         CustomerName: 'Test',
         Division: 'Dhaka',
         District: 'Dhaka',
@@ -132,5 +138,142 @@ describe('ClientOrderService with mocked CAPTCHA and database', () => {
     });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(orders.create).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, 0, -1, NaN, Infinity, '200', 10000001])(
+    'rejects invalid catalog price %s without client fallback',
+    async (price) => {
+      products.find.mockResolvedValue([
+        { _id: 'net', EndUserDiscountedPrice: price },
+      ]);
+      await expect(service.createOrder(dto)).rejects.toMatchObject({
+        status: 400,
+      });
+      expect(orders.create).not.toHaveBeenCalled();
+    },
+  );
+  it('uses regular database price only when discount price is absent', async () => {
+    products.find.mockResolvedValue([{ _id: 'net', EndUserPrice: 250 }]);
+    await service.createOrder(dto);
+    expect(orders.create.mock.calls[0][0].Items[0].UnitPrice).toBe(250);
+  });
+  it.each([1.5, 1001, '2', Infinity])(
+    'rejects non-integer or unbounded quantity %s',
+    async (Quantity) => {
+      await expect(
+        service.createOrder({ ...dto, Items: [{ ...dto.Items[0], Quantity }] }),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(orders.create).not.toHaveBeenCalled();
+    },
+  );
+  it('strips arbitrary catalog fulfillment options and submitted images', async () => {
+    await service.createOrder({
+      ...dto,
+      Items: [
+        {
+          ...dto.Items[0],
+          CustomOptions: { material: 'fake' },
+          ImageLinks: ['https://attacker.invalid'],
+        },
+      ],
+    });
+    expect(orders.create.mock.calls[0][0].Items[0]).toEqual(
+      expect.objectContaining({ CustomOptions: {}, ImageLinks: [] }),
+    );
+  });
+  it.each([[[]], [Array(101).fill(dto.Items[0])]])(
+    'rejects empty or oversized carts',
+    async (Items) => {
+      await expect(
+        service.createOrder({ ...dto, Items }),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(orders.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('replays the same request without creating or repricing an order', async () => {
+    await service.createOrder(dto);
+    const saved = orders.create.mock.calls[0][0];
+    orders.findOne.mockResolvedValue(saved);
+    products.find.mockClear();
+    const response = await service.createOrder({
+      ...dto,
+      CaptchaToken: 'fresh-captcha',
+    });
+    expect(response.Data.OrderId).toBe(saved._id);
+    expect(orders.create).toHaveBeenCalledTimes(1);
+    expect(products.find).not.toHaveBeenCalled();
+  });
+  it('rejects reuse of a request ID for different order data', async () => {
+    await service.createOrder(dto);
+    orders.findOne.mockResolvedValue(orders.create.mock.calls[0][0]);
+    await expect(
+      service.createOrder({ ...dto, Address: 'different' }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(orders.create).toHaveBeenCalledTimes(1);
+  });
+  it('resolves a duplicate-key race to the already created order', async () => {
+    await service.createOrder(dto);
+    const saved = orders.create.mock.calls[0][0];
+    orders.create.mockRejectedValueOnce({ code: 11000 });
+    orders.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(saved);
+    const result = await service.createOrder(dto);
+    expect(result.Data.OrderId).toBe(saved._id);
+  });
+
+  it('creates a manual unpaid order requiring immediate follow-up even if a client claims paid', async () => {
+    const response = await service.createOrder({
+      ...dto,
+      PhoneNumber: '+880 1700-000000',
+      PaymentStatus: 'paid',
+      PaymentHandling: 'online',
+      RequiresImmediateAction: false,
+    });
+    expect(orders.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        PhoneNumber: '01700000000',
+        PaymentStatus: 'unpaid',
+        PaymentHandling: 'manual',
+        RequiresImmediateAction: true,
+      }),
+    );
+    expect(response.Data).toMatchObject({
+      PaymentHandling: 'manual',
+      ContactRequired: true,
+    });
+  });
+  it.each([
+    '',
+    '   ',
+    '12345',
+    '01200000000',
+    '017000000000',
+    '017abcdefgh',
+    '+441234567890',
+    null,
+    undefined,
+  ])(
+    'rejects an invalid contact phone %j before CAPTCHA or persistence',
+    async (PhoneNumber) => {
+      await expect(
+        service.createOrder({ ...dto, PhoneNumber }),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(orders.create).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+  it('treats equivalent phone formats as the same retry and does not queue a duplicate alert', async () => {
+    await service.createOrder({ ...dto, PhoneNumber: '+8801700000000' });
+    const saved = orders.create.mock.calls[0][0];
+    orders.findOne.mockResolvedValue(saved);
+    const replay = await service.createOrder({
+      ...dto,
+      PhoneNumber: '01700000000',
+    });
+    expect(orders.create).toHaveBeenCalledTimes(1);
+    expect(replay.Data).toMatchObject({
+      PaymentHandling: 'manual',
+      ContactRequired: true,
+    });
   });
 });

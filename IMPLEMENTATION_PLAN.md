@@ -20,7 +20,7 @@ Every new API implementation must include corresponding FeatureEndpointMap and F
 - Verify authorized roles can call the endpoint and unauthorized roles cannot. Preserve own-record restrictions for employees and wholesalers; a feature permission does not grant access to another user's data.
 - Explicitly document public endpoint access; do not accidentally require login for public storefront APIs or grant private APIs public access.
 - Include seed application and permission checks in acceptance criteria. Do not mark a new API complete while its required permission data is missing, or bypass validation to avoid adding seed data.
-- Source note: src/auth/jwt.strategy.ts currently queries FeatureEndpointMap. FeatureRoleMap and its seed implementation were not located in the inspected backend source; inspect the existing database/seed setup and establish the version-controlled seed path before implementation. Never guess its fields.
+- Source note: src/auth/jwt.strategy.ts currently queries FeatureEndpointMap. On 2026-10-23, database inspection confirmed FeatureRoleMap was absent. With owner approval BE-102 establishes its schema and repeatable seed in scripts/seed-builder-quote.cjs; see docs/BUILDER_QUOTE.md. These public-endpoint records do not alter private endpoint permissions.
 
 ## MVP data policy
 
@@ -55,7 +55,7 @@ Package declarations: NestJS 11.1.24, TypeScript 5.9.3, Mongoose 9.6.2; Node eng
 | BE-004 | IMPLEMENTED | Separate public product response excludes MakingPrice and WholeSalerPrice. |
 | BE-005 | IMPLEMENTED | Product and empty-product due-payment invoices; sales snapshots retain actual negotiated SellingPrice. |
 | BE-006 | IMPLEMENTED | Wholesaler invoice scoping and dashboard branch; profit omitted by response sanitization. Needs regression coverage for cross-wholesaler access. |
-| BE-007 | IMPLEMENTED | Due-payment normalization uses PaymentAmount for TotalAmount and ProfitMargin, per prior business request. Accounting interpretation remains a decision below. |
+| BE-007 | IMPLEMENTED | Due-payment receipts use PaymentAmount for display while BE-107 separates gross profit from realized cash margin. |
 | BE-008 | IMPLEMENTED | Public order creation, CAPTCHA verification, shipping, coupons, persisted order snapshots and pending status. |
 | BE-009 | PARTIAL | Custom mosquito-net recalculation at order submission from MongoDB prices; no cart-validation endpoint exists. Security gaps listed below. |
 | BE-010 | IMPLEMENTED | Gemini description service with Bengali instruction and failure handling; provider availability still external. |
@@ -82,12 +82,12 @@ Auth and user routes remain defined in their controllers. Preserve existing casi
 Frontend mirror: client src/pages/BuildYourOwn.tsx. Backend authority currently runs during CreateClientOrder.
 
 - LW, RW, LL, RL and cloth heights are inches.
-- Yard product NetHeight is interpreted as feet; heightInInch = NetHeight * 12. Admin still labels this as inches: resolve BE-103/ADMIN-101 before creating fresh test data.
+- Yard product NetHeight is feet; heightInInch = NetHeight * 12. BE-103 updates the admin label and explicit API unit to feet.
 - TotalNet = LW + RW + LL + RL.
-- NoOfKuchi = count * 8 for 4side; otherwise floor(TotalNet / gap) + 1. The floor is current implementation; confirm intended rounding for nonintegral gaps.
+- NoOfKuchi = count * 8 for 4side; otherwise floor(TotalNet / gap) + 1. The owner confirmed floor rounding for nonintegral gaps in BE-103.
 - KuchiNet = NoOfKuchi * 2; TotalBoundaryNet = TotalNet + KuchiNet.
 - TopperNet = ceil(min(LW,RW,LL,RL) / heightInInch) * oppositeSideRun. Width operation uses max(LL,RL); length operation uses max(LW,RW).
-- Current denominator uses the main net product height even when a different topper product is selected; confirm this rule before changing it.
+- Current denominator uses the main net product height even when a different topper product is selected; the owner confirmed this rule for mosquito-net-v1.
 - BelowCloth = TotalBoundaryNet / max(floor(30 / max(2*topHeight + belowHeight,1)),1), or zero when disabled.
 - For Fita a:b, requiredInches = TotalNet + a*max(LW,RW) + b*max(LL,RL).
 - One Fita roll = 12 yards = 36 feet = 432 inches. Rolls = max(ceil(requiredInches/432),1).
@@ -97,35 +97,49 @@ Frontend mirror: client src/pages/BuildYourOwn.tsx. Backend authority currently 
 
 ## Prioritized next work
 
-### BE-101 - P0 - Close price-validation bypasses (TODO)
+### BE-101 - P0 - Close price-validation bypasses (COMPLETE)
 
 Current normalizeCustomItem accepts unknown custom-* items using client UnitPrice. Catalog pricing also falls back to client UnitPrice when stored prices are falsy. Builder product lookup checks existence but not category/subcategory; Fita ratios and Kuchi settings lack the UI's full allowed-value checks. These mean prior claims of complete tamper protection were too broad.
 
 Acceptance: unsupported custom types rejected; no client price fallback; finite valid database prices and net height required; correct material categories enforced; strict string/boolean/numeric schemas; allowed styles/ranges enforced; quantities bounded positive integers; no fabricated product metadata accepted as fulfillment instructions. Add adversarial tests for each path. Document or remove the current Tk 1 submitted-price tolerance.
 
-### BE-102 - P0 - Validate before adding to cart (TODO)
+Completed 2026-10-23: checkout rejects unsupported custom types, invalid stored prices/heights, incorrect material categories and malformed builder options. Catalog prices come only from the database; builder prices are recalculated and must match exactly (the Tk 1 tolerance is removed). Fulfillment metadata is rebuilt from validated options and database products. Bounded quantities and carts are enforced. Regression coverage: 364 passing tests across 17 suites. See TESTING.md for limits and verification boundaries. No new endpoints or permission seeds were needed.
+
+### BE-102 - P0 - Validate before adding to cart (COMPLETE)
 
 Add a public rate-limited quote/validate endpoint for structured builder inputs. Reuse the same calculator at checkout. Return authoritative price, normalized options and breakdown; never trust a quote echoed from the browser without checkout verification. Coordinate CLIENT-101. Acceptance: changing client price or bypassing cart cannot lower the accepted order price.
 
-### BE-103 - P1 - Units and formula contract (TODO)
+Completed 2026-10-23: POST business/QuoteBuilder reuses checkout validation/calculation, returns normalized material metadata and per-unit breakdown, and does not create orders. Checkout rereads current products and rejects altered or stale prices. Both permission collections seeded and replay verified (five records each), including the owner-approved new FeatureRoleMap schema. Typecheck and 385 regression tests pass. CLIENT-101 remains separate: its exact request/response and UI handling contract is documented in docs/BUILDER_QUOTE.md. No production build or deployment performed.
+
+### BE-103 - P1 - Units and formula contract (COMPLETE)
 
 Define NetHeight unit explicitly across all repos and use it in fresh test/seed data; no existing-data conversion is required. Extract a pure calculator and fixture tests for both operations, below cloth, alternate topper, gap rounding and Fita boundaries 432/433/864 inches. Record formula version on orders. See ADMIN-101 and CLIENT-102.
 
-### BE-104 - P1 - Order operations (TODO)
+Completed 2026-10-23: owner confirmed feet, main-fabric topper height and floor-based gap counting. Extracted pure mosquito-net-v1 calculator with fixtures for both operations, below cloth, alternate topper and 432/433/864-inch Fita boundaries. Product responses expose NetHeightUnit; admin labels feet; client preview uses full net height. Quote/options/orders record the formula version. No existing data conversion. See docs/UNITS_AND_ORDERS.md.
+
+### BE-104 - P1 - Order operations (COMPLETE)
 
 Add authorized paginated order listing/details, fulfillment transitions, cancellation and audit history for ADMIN-102. Define stock reservation/consumption timing and atomic updates so duplicate orders or simultaneous checkout cannot oversell. Keep order status distinct from payment status.
 
-### BE-105 - P1 - Payments (DECISION)
+Completed 2026-10-23: admin-only ListOrders/GetOrder/TransitionOrder APIs, separate unpaid payment status, versioned transitions and append-only audit. Owner selected deduction on confirmation, not checkout. Confirmation/cancellation use transactions, conditional stock updates and stored material snapshots. UUID request-ID uniqueness prevents checkout retry duplicates. Both permission maps and indexes were seeded/replayed. Eight isolated local replica-set integration tests verify concurrency, rollback, cancellation, access and pagination. ADMIN-102 UI and BE-106 invoice inventory consistency remain separate work. See docs/UNITS_AND_ORDERS.md.
 
-Choose gateway versus manual verification and obtain merchant configuration. Implement server-created payment sessions using verified totals, transaction records, provider verification, idempotent callbacks, amount/currency/order matching and retry/failure/refund handling. Secrets backend-only. Coordinate CLIENT-104 and ADMIN-103. No provider choice is approved by this document.
+### BE-105 - P1 - Manual order handling (COMPLETE)
 
-### BE-106 - P1 - Invoice consistency and access tests (TODO)
+Final owner decision (2026-10-24): no payment-method selection or online payment during order placement. A valid Bangladesh mobile number is mandatory. Explain that a salesperson will contact the customer, delivery charges may be requested in advance, and products may be sent cash on delivery. Handle collection and agreement manually; do not mark orders paid automatically. New orders require immediate admin follow-up. Coordinate CLIENT-104 messaging and admin follow-up UI using existing order endpoints. Gateway sessions, wallet integrations and automated payment callbacks are not part of this business workflow.
+
+Implemented 2026-10-24: mandatory normalized Bangladesh mobile number, fixed manual/unpaid order fields and immediate-action queue flag. Existing ListOrders supports NeedsAction; successful admin transitions clear the flag transactionally. Backend verification: 431 tests, 158 HTTP contract tests, 9 isolated Mongo integration tests and typecheck passed. No new endpoint/permission mappings or merchant configuration required. See docs/MANUAL_ORDER_WORKFLOW.md for the final decision and frontend handoff.
+
+### BE-106 - P1 - Invoice consistency and access tests (COMPLETE)
 
 Test create/edit/delete effects on stock, dues and dashboards; prevent partial multi-document updates. Verify wholesaler A cannot read B's list/detail/dashboard or private profit/cost fields. Review all role enforcement, not only UI navigation.
 
-### BE-107 - P1 - Due-payment reporting policy (DECISION)
+Completed 2026-10-25: create, edit and delete now update inventory, product-sale rows and invoices in one MongoDB transaction with conditional stock deductions. Edit/delete restore prior stock; due payments cannot contain products and reduce outstanding due without stock writes. Strict numeric, owner-role, pagination and admin/read-role validation now applies in both controller and service. Invoice numbers and common owner/detail lookup paths are indexed. Wholesaler list/detail/dashboard queries are owner-scoped and omit profit/private reporting; admin+wholesaler users retain admin access. Verification passes 449 unit/contract tests, 168 HTTP tests, 21 isolated MongoDB integration tests and typecheck. Existing routes mean permission seed tables are unchanged. See docs/INVOICE_CONSISTENCY.md.
 
-Current requested behavior counts recovered dues as profit. Decide how cash received, sales revenue and gross profit should be reported to avoid counting original-sale profit twice. Agree the reporting policy before launch and test it with fresh invoices and due payments; existing test records need not be preserved.
+### BE-107 - P1 - Due-payment reporting policy (COMPLETE)
+
+Use product-sale value minus snapshotted product cost as gross profit. Use all cash received minus product cost as realized cash margin, allowing it to remain negative until collections recover cost. Due-payment receipts increase cash collected and realized cash margin, but contribute zero product cost and zero gross profit. Outstanding due, customer credit and cost at risk are reported independently.
+
+Completed 2026-10-25: invoices and product-sale rows now snapshot making cost; invoice responses expose ProductCostAmount, GrossProfit and RealizedCashMargin instead of the ambiguous ProfitMargin field. Dashboard reporting separates monthly cash collected, gross profit and realized cash margin, plus lifetime outstanding due, customer credit and cost at risk. Filtered invoice lists include an aggregate summary independent of pagination. Wholesaler responses continue to omit cost/profit fields. Real MongoDB integration coverage verifies partial due recovery and no duplicate gross profit. Existing routes are reused, so permission seed tables are unchanged. See docs/DUE_PAYMENT_REPORTING.md.
 
 ### BE-108 - P2 - Maintenance and deployment (TODO)
 

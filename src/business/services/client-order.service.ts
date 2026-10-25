@@ -1,5 +1,17 @@
-﻿import {
+import {
+  BD_MOBILE_PATTERN,
+  normalizeOrderPhone,
+  ORDER_PAYMENT_HANDLING,
+} from '../../shared/constant/order-payment.constant';
+import { createHash } from 'node:crypto';
+import {
+  calculateMosquitoNet,
+  MosquitoNetBuilderOptions,
+  FORMULA_VERSION,
+} from '../calculations/mosquito-net';
+import {
   BadRequestException,
+  ConflictException,
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -16,6 +28,14 @@ import { Order } from '../../shared/schemas/order.schema';
 import { Product } from '../../shared/schemas/product.schema';
 import { UserRoles } from '../../shared/constant/roles.constant';
 
+import {
+  ORDER_LIMITS,
+  FITA_STYLES,
+} from '../../shared/constant/order-validation.constant';
+import { PRODUCT_CATEGORY_SUBCATEGORY_MAP } from '../../shared/constant/product.constant';
+
+import { QuoteBuilderDto } from '../dto/client-order/quote-builder.dto';
+
 type CouponType = 'fixed' | 'percent';
 
 const VALID_COUPONS: Record<string, { discount: number; type: CouponType }> = {
@@ -29,32 +49,14 @@ type VerifiedCaptcha = {
   hostname?: string;
 };
 
-type MosquitoNetBuilderOptions = {
-  leftWidth: number;
-  rightWidth: number;
-  leftLength: number;
-  rightLength: number;
-  mosquitoNetYardId: string;
-  includeBelowCloth: boolean;
-  belowClothId: string;
-  includeTopperNet: boolean;
-  topperNetYardId: string;
-  topperDirection: 'width' | 'length';
-  topHeight: number;
-  belowHeight: number;
-  kuchiStyle: '4side' | 'gap';
-  kuchiCount: number;
-  kuchiGap: number;
-  fitaId: string;
-  fitaStyle: string;
-  sutarBobinId: string;
-};
-
 type MosquitoNetCalculationResult = {
+  breakdown: Record<string, number>;
   finalPrice: number;
   fitaLengthInInch: number;
   totalFita: number;
   topperNet: number;
+  options: Record<string, string>;
+  images: string[];
   totalBoundaryNet: number;
 };
 
@@ -68,14 +70,115 @@ export class ClientOrderService {
     private readonly productModel: mongoose.Model<Product>,
   ) {}
 
+  async quoteBuilder(dto: QuoteBuilderDto): Promise<CommandResponse> {
+    if (dto.BuildType !== 'MosquitoNet')
+      throw new BadRequestException('Unsupported custom product type');
+    if (
+      !Number.isInteger(dto.Quantity) ||
+      dto.Quantity < 1 ||
+      dto.Quantity > ORDER_LIMITS.quantity
+    )
+      throw new BadRequestException('Invalid quantity');
+    const calculated = await this.calculateMosquitoNetBuilderPrice(
+      dto.CustomOptions,
+    );
+    const unitPrice = this.getCalculatedUnitPrice(calculated);
+    const response = new CommandResponse();
+    response.setSuccess({
+      FormulaVersion: FORMULA_VERSION,
+      BuildType: 'MosquitoNet',
+      Currency: 'BDT',
+      ProductName: 'Custom Mosquito Net',
+      Category: 'Custom',
+      SubCategory: 'Mosquito Net',
+      ImageLinks: calculated.images,
+      UnitPrice: unitPrice,
+      Quantity: dto.Quantity,
+      TotalPrice: unitPrice * dto.Quantity,
+      CustomOptions: this.getCalculatedOptions(calculated),
+      Breakdown: {
+        ...calculated.breakdown,
+        UnroundedUnitPrice: calculated.finalPrice,
+        RoundingAdjustment: unitPrice - calculated.finalPrice,
+      },
+    });
+    return response;
+  }
+
+  private validateOptionStrings(options: Record<string, string>) {
+    if (
+      !options ||
+      typeof options !== 'object' ||
+      Array.isArray(options) ||
+      Object.keys(options).length > 50 ||
+      Object.entries(options).some(
+        ([key, value]) =>
+          key.length > 100 || typeof value !== 'string' || value.length > 1000,
+      )
+    )
+      throw new BadRequestException(
+        'Custom options must contain bounded strings',
+      );
+    if (
+      (options.BuildCalculationType !== undefined &&
+        options.BuildCalculationType !== 'MosquitoNet') ||
+      (options.BuildType !== undefined && options.BuildType !== 'Mosquito Net')
+    )
+      throw new BadRequestException('Unsupported custom product type');
+  }
+
+  private getCalculatedUnitPrice(calculated: MosquitoNetCalculationResult) {
+    const price = Math.ceil(calculated.finalPrice);
+    if (!Number.isFinite(price) || price <= 0 || price > ORDER_LIMITS.unitPrice)
+      throw new BadRequestException('Invalid calculated price');
+    return price;
+  }
+
+  private getCalculatedOptions(calculated: MosquitoNetCalculationResult) {
+    return {
+      ...calculated.options,
+      FormulaVersion: FORMULA_VERSION,
+      ServerCalculatedPrice: String(this.getCalculatedUnitPrice(calculated)),
+      ServerCalculatedFitaLengthInch: String(calculated.fitaLengthInInch),
+      ServerCalculatedFitaRoll: String(calculated.totalFita),
+      ServerCalculatedTopperNetInch: String(calculated.topperNet),
+      ServerCalculatedBoundaryNetInch: String(calculated.totalBoundaryNet),
+    };
+  }
+
   async createOrder(
     dto: CreateClientOrderDto,
     customerIp?: string,
   ): Promise<CommandResponse> {
+    const phoneNumber = normalizeOrderPhone(dto.PhoneNumber);
+    if (!BD_MOBILE_PATTERN.test(phoneNumber))
+      throw new BadRequestException(
+        'A valid Bangladesh mobile number is required so our sales team can contact you',
+      );
     const verifiedCaptcha = await this.verifyCaptcha(
       dto.CaptchaToken,
       customerIp,
     );
+    const { CaptchaToken: _captcha, RequestId: _request, ...payload } = dto;
+    const canonical = (value: unknown): unknown =>
+      Array.isArray(value)
+        ? value.map(canonical)
+        : value && typeof value === 'object'
+          ? Object.fromEntries(
+              Object.entries(value)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([k, v]) => [k, canonical(v)]),
+            )
+          : value;
+    const requestHash = createHash('sha256')
+      .update(
+        JSON.stringify(canonical({ ...payload, PhoneNumber: phoneNumber })),
+      )
+      .digest('hex');
+    const existing = await this.orderModel.findOne({
+      RequestId: dto.RequestId,
+    });
+    if (existing) return this.replayOrder(existing, requestHash);
     const normalizedItems = await this.normalizeItems(dto.Items);
     const subtotal = normalizedItems.reduce(
       (sum, item) => sum + item.UnitPrice * item.Quantity,
@@ -90,48 +193,118 @@ export class ClientOrderService {
     const couponDiscount = this.getCouponDiscount(couponCode, subtotal);
     const totalAmount = Math.max(subtotal - couponDiscount + shippingCost, 0);
     const orderId = this.sharedService.getUid();
-    const orderNumber = `ORD-${Date.now()}`;
+    const orderNumber = `ORD-${orderId}`;
     const createdDate = new Date().toISOString();
 
-    await this.orderModel.create({
-      _id: orderId,
-      CreatedDate: createdDate,
-      RolesAllowedToRead: [UserRoles.Admin],
-      RolesAllowedToWrite: [UserRoles.Admin],
-      RolesAllowedToUpdate: [UserRoles.Admin],
-      RolesAllowedToDelete: [UserRoles.Admin],
-      OrderNumber: orderNumber,
-      CustomerName: dto.CustomerName.trim(),
-      PhoneNumber: dto.PhoneNumber.trim(),
-      Division: division,
-      District: district,
-      Area: dto.Area.trim(),
-      PostCode: dto.PostCode.trim(),
-      Address: dto.Address.trim(),
-      DeliveryNotes: dto.DeliveryNotes?.trim() || '',
-      DeliveryZone: dto.DeliveryZone,
-      CouponCode: couponCode || '',
-      CouponDiscount: couponDiscount,
-      ShippingCost: shippingCost,
-      Subtotal: subtotal,
-      TotalAmount: totalAmount,
-      OrderStatus: 'pending',
-      Items: normalizedItems,
-      CaptchaVerifiedAt: createdDate,
-      CaptchaHostname: verifiedCaptcha.hostname || '',
-      CustomerIp: customerIp || '',
-    });
+    try {
+      await this.orderModel.create({
+        RequestId: dto.RequestId,
+        RequestHash: requestHash,
+        FormulaVersion: FORMULA_VERSION,
+        Version: 0,
+        PaymentStatus: 'unpaid',
+        PaymentHandling: ORDER_PAYMENT_HANDLING,
+        RequiresImmediateAction: true,
+        StockDeducted: false,
+        StockMovements: [],
+        AuditHistory: [
+          {
+            From: '',
+            To: 'pending',
+            By: 'storefront',
+            At: createdDate,
+            Note: 'Order placed',
+          },
+        ],
+        _id: orderId,
+        CreatedDate: createdDate,
+        RolesAllowedToRead: [UserRoles.Admin],
+        RolesAllowedToWrite: [UserRoles.Admin],
+        RolesAllowedToUpdate: [UserRoles.Admin],
+        RolesAllowedToDelete: [UserRoles.Admin],
+        OrderNumber: orderNumber,
+        CustomerName: dto.CustomerName.trim(),
+        PhoneNumber: phoneNumber,
+        Division: division,
+        District: district,
+        Area: dto.Area.trim(),
+        PostCode: dto.PostCode.trim(),
+        Address: dto.Address.trim(),
+        DeliveryNotes: dto.DeliveryNotes?.trim() || '',
+        DeliveryZone: dto.DeliveryZone,
+        CouponCode: couponCode || '',
+        CouponDiscount: couponDiscount,
+        ShippingCost: shippingCost,
+        Subtotal: subtotal,
+        TotalAmount: totalAmount,
+        OrderStatus: 'pending',
+        Items: normalizedItems,
+        CaptchaVerifiedAt: createdDate,
+        CaptchaHostname: verifiedCaptcha.hostname || '',
+        CustomerIp: customerIp || '',
+      });
+    } catch (error) {
+      if (error?.code !== 11000) throw error;
+      const duplicate = await this.orderModel.findOne({
+        RequestId: dto.RequestId,
+      });
+      if (!duplicate) throw error;
+      return this.replayOrder(duplicate, requestHash);
+    }
 
     const response = new CommandResponse();
     response.setSuccess({
       OrderId: orderId,
       OrderNumber: orderNumber,
       TotalAmount: totalAmount,
+      PaymentHandling: ORDER_PAYMENT_HANDLING,
+      ContactRequired: true,
+    });
+    return response;
+  }
+
+  private replayOrder(order: Order, hash: string) {
+    if (order.RequestHash !== hash)
+      throw new ConflictException(
+        'RequestId already used for a different order',
+      );
+    const response = new CommandResponse();
+    response.setSuccess({
+      OrderId: order._id,
+      OrderNumber: order.OrderNumber,
+      TotalAmount: order.TotalAmount,
+      PaymentHandling: ORDER_PAYMENT_HANDLING,
+      ContactRequired: order.RequiresImmediateAction,
     });
     return response;
   }
 
   private async normalizeItems(items: CreateClientOrderItemDto[]) {
+    if (
+      !Array.isArray(items) ||
+      !items.length ||
+      items.length > ORDER_LIMITS.items
+    ) {
+      throw new BadRequestException('Invalid order items');
+    }
+    for (const item of items) {
+      if (!item || typeof item.ProductId !== 'string' || !item.ProductId.trim())
+        throw new BadRequestException('Invalid product ID');
+      if (
+        !Number.isInteger(item.Quantity) ||
+        item.Quantity < 1 ||
+        item.Quantity > ORDER_LIMITS.quantity
+      )
+        throw new BadRequestException('Invalid quantity');
+      if (
+        typeof item.UnitPrice !== 'number' ||
+        !Number.isFinite(item.UnitPrice) ||
+        item.UnitPrice <= 0 ||
+        item.UnitPrice > ORDER_LIMITS.unitPrice
+      )
+        throw new BadRequestException('Invalid submitted price');
+      this.validateOptionStrings(item.CustomOptions ?? {});
+    }
     const catalogItems = items.filter(
       (item) => !item.ProductId.startsWith('custom-'),
     );
@@ -145,35 +318,31 @@ export class ClientOrderService {
 
     const normalizedItems = await Promise.all(
       items.map(async (item) => {
-      if (!Number.isFinite(item.Quantity) || item.Quantity <= 0) {
-        throw new BadRequestException(
-          `Invalid quantity for product ${item.ProductName}`,
-        );
-      }
+        if (item.ProductId.startsWith('custom-')) {
+          return this.normalizeCustomItem(item);
+        }
 
-      if (item.ProductId.startsWith('custom-')) {
-        return this.normalizeCustomItem(item);
-      }
+        const product = productsById.get(item.ProductId);
+        if (!product) {
+          throw new BadRequestException(
+            `Product not found: ${item.ProductName}`,
+          );
+        }
 
-      const product = productsById.get(item.ProductId);
-      if (!product) {
-        throw new BadRequestException(`Product not found: ${item.ProductName}`);
-      }
-
-      const unitPrice =
-        product.EndUserDiscountedPrice ||
-        product.EndUserPrice ||
-        item.UnitPrice;
-      return {
-        ProductId: item.ProductId,
-        ProductName: product.ProductName,
-        Category: product.Category,
-        SubCategory: product.SubCategory,
-        ImageLinks: product.ImageLinks || item.ImageLinks || [],
-        UnitPrice: unitPrice,
-        Quantity: item.Quantity,
-        CustomOptions: item.CustomOptions || {},
-      };
+        const unitPrice = this.getEndUserPrice(product);
+        return {
+          ProductId: item.ProductId,
+          ProductName: product.ProductName,
+          Category: product.Category,
+          SubCategory: product.SubCategory,
+          ImageLinks: product.ImageLinks || [],
+          UnitPrice: unitPrice,
+          Quantity: item.Quantity,
+          CustomOptions: {},
+          InventoryRequirements: [
+            { ProductId: item.ProductId, Quantity: item.Quantity },
+          ],
+        };
       }),
     );
 
@@ -182,60 +351,70 @@ export class ClientOrderService {
 
   private async normalizeCustomItem(item: CreateClientOrderItemDto) {
     const options = item.CustomOptions || {};
-
     if (
-      item.ProductId.startsWith('custom-mosquito-net-') ||
-      options.BuildCalculationType === 'MosquitoNet'
+      !item.ProductId.startsWith('custom-mosquito-net-') ||
+      (options.BuildCalculationType !== undefined &&
+        options.BuildCalculationType !== 'MosquitoNet') ||
+      (options.BuildType !== undefined && options.BuildType !== 'Mosquito Net')
     ) {
-      const calculated = await this.calculateMosquitoNetBuilderPrice(options);
-      const serverUnitPrice = Math.ceil(calculated.finalPrice);
-
-      if (Math.abs(item.UnitPrice - serverUnitPrice) > 1) {
-        throw new BadRequestException(
-          'Custom mosquito net price validation failed. Please refresh and add it again.',
-        );
-      }
-
-      return {
-        ProductId: item.ProductId,
-        ProductName: 'Custom Mosquito Net',
-        Category: 'Custom',
-        SubCategory: 'Mosquito Net',
-        ImageLinks: item.ImageLinks || [],
-        UnitPrice: serverUnitPrice,
-        Quantity: item.Quantity,
-        CustomOptions: {
-          ...options,
-          ServerCalculatedPrice: String(serverUnitPrice),
-          ServerCalculatedFitaLengthInch: String(calculated.fitaLengthInInch),
-          ServerCalculatedFitaRoll: String(calculated.totalFita),
-          ServerCalculatedTopperNetInch: String(calculated.topperNet),
-          ServerCalculatedBoundaryNetInch: String(calculated.totalBoundaryNet),
-        },
-      };
+      throw new BadRequestException('Unsupported custom product type');
     }
-
-    if (!Number.isFinite(item.UnitPrice) || item.UnitPrice <= 0) {
+    const calculated = await this.calculateMosquitoNetBuilderPrice(options);
+    const serverUnitPrice = this.getCalculatedUnitPrice(calculated);
+    if (
+      !Number.isFinite(serverUnitPrice) ||
+      serverUnitPrice <= 0 ||
+      serverUnitPrice > ORDER_LIMITS.unitPrice ||
+      item.UnitPrice !== serverUnitPrice
+    ) {
       throw new BadRequestException(
-        `Invalid custom product price for ${item.ProductName}`,
+        'Custom mosquito net price validation failed. Please refresh and add it again.',
       );
     }
-
     return {
       ProductId: item.ProductId,
-      ProductName: item.ProductName.trim(),
-      Category: item.Category.trim(),
-      SubCategory: item.SubCategory.trim(),
-      ImageLinks: item.ImageLinks || [],
-      UnitPrice: item.UnitPrice,
+      ProductName: 'Custom Mosquito Net',
+      Category: 'Custom',
+      SubCategory: 'Mosquito Net',
+      ImageLinks: calculated.images,
+      UnitPrice: serverUnitPrice,
       Quantity: item.Quantity,
-      CustomOptions: options,
+      CustomOptions: this.getCalculatedOptions(calculated),
+      InventoryRequirements: this.builderInventory(calculated, item.Quantity),
     };
+  }
+
+  private builderInventory(
+    calculated: MosquitoNetCalculationResult,
+    quantity: number,
+  ) {
+    const o = calculated.options;
+    return [
+      {
+        ProductId: o.MosquitoNetYardId,
+        Quantity: (calculated.totalBoundaryNet / 36) * quantity,
+      },
+      {
+        ProductId: o.TopperNetYardId,
+        Quantity: (calculated.topperNet / 36) * quantity,
+      },
+      ...(o.IncludeBelowCloth === 'true'
+        ? [
+            {
+              ProductId: o.BelowClothId,
+              Quantity: (calculated.breakdown.BelowClothInch / 36) * quantity,
+            },
+          ]
+        : []),
+      { ProductId: o.FitaId, Quantity: calculated.totalFita * quantity },
+      { ProductId: o.SutarBobinId, Quantity: quantity },
+    ];
   }
 
   private async calculateMosquitoNetBuilderPrice(
     options: Record<string, string>,
   ): Promise<MosquitoNetCalculationResult> {
+    this.validateOptionStrings(options);
     const builderOptions = this.parseMosquitoNetBuilderOptions(options);
     const products = await this.productModel.find({
       _id: {
@@ -285,68 +464,64 @@ export class ClientOrderService {
       'Sutar bobin',
     );
 
-    const totalNet =
-      builderOptions.leftWidth +
-      builderOptions.rightWidth +
-      builderOptions.leftLength +
-      builderOptions.rightLength;
-    const noOfKuchi =
-      builderOptions.kuchiStyle === '4side'
-        ? builderOptions.kuchiCount * 8
-        : Math.floor(totalNet / Math.max(builderOptions.kuchiGap, 1)) + 1;
-    const kuchiNet = noOfKuchi * 2;
-    const totalBoundaryNet = totalNet + kuchiNet;
-    const minimumSide = Math.min(
-      builderOptions.leftWidth,
-      builderOptions.rightWidth,
-      builderOptions.leftLength,
-      builderOptions.rightLength,
+    this.getNetHeight(topperNet);
+    const calculation = calculateMosquitoNet(
+      builderOptions,
+      this.getNetHeight(mosquitoNetYard),
+      {
+        yard: this.getEndUserPrice(mosquitoNetYard),
+        topper: this.getEndUserPrice(topperNet),
+        cloth: this.getEndUserPrice(belowCloth),
+        fita: this.getEndUserPrice(fita),
+        thread: this.getEndUserPrice(sutarBobin),
+      },
     );
-    const mosquitoNetYardHeightInInch = Math.max(
-      this.toNumber(mosquitoNetYard.NetHeight) * 12,
-      1,
-    );
-    const oppositeSideRun =
-      builderOptions.topperDirection === 'width'
-        ? Math.max(builderOptions.leftLength, builderOptions.rightLength)
-        : Math.max(builderOptions.leftWidth, builderOptions.rightWidth);
-    const topperNetInInch =
-      Math.ceil(minimumSide / mosquitoNetYardHeightInInch) * oppositeSideRun;
-    const topAndBelowHeight =
-      builderOptions.topHeight * 2 + builderOptions.belowHeight;
-    const belowClothInInch = builderOptions.includeBelowCloth
-      ? totalBoundaryNet /
-        Math.max(Math.floor(30 / Math.max(topAndBelowHeight, 1)), 1)
-      : 0;
-    const { widthCount, lengthCount } = this.parseFitaStyle(
-      builderOptions.fitaStyle,
-    );
-    const fitaLengthInInch =
-      totalNet +
-      widthCount * Math.max(builderOptions.leftWidth, builderOptions.rightWidth) +
-      lengthCount *
-        Math.max(builderOptions.leftLength, builderOptions.rightLength);
-    const totalFita = Math.max(Math.ceil(fitaLengthInInch / (12 * 36)), 1);
-    const finalPrice =
-      (totalBoundaryNet / 36) * this.getEndUserPrice(mosquitoNetYard) +
-      (topperNetInInch / 36) * this.getEndUserPrice(topperNet) +
-      (belowClothInInch / 36) * this.getEndUserPrice(belowCloth) +
-      totalFita * this.getEndUserPrice(fita) +
-      this.getEndUserPrice(sutarBobin) +
-      200;
-
     return {
-      finalPrice,
-      fitaLengthInInch,
-      totalFita,
-      topperNet: topperNetInInch,
-      totalBoundaryNet,
+      ...calculation,
+      images: mosquitoNetYard.ImageLinks || [],
+      options: {
+        BuildCalculationType: 'MosquitoNet',
+        BuildType: 'Mosquito Net',
+        LeftWidthInch: String(builderOptions.leftWidth),
+        RightWidthInch: String(builderOptions.rightWidth),
+        LeftLengthInch: String(builderOptions.leftLength),
+        RightLengthInch: String(builderOptions.rightLength),
+        MosquitoNetYardId: builderOptions.mosquitoNetYardId,
+        IncludeBelowCloth: String(builderOptions.includeBelowCloth),
+        BelowClothId: builderOptions.includeBelowCloth
+          ? builderOptions.belowClothId
+          : '',
+        IncludeTopperNet: String(builderOptions.includeTopperNet),
+        TopperNetYardId: builderOptions.includeTopperNet
+          ? builderOptions.topperNetYardId
+          : builderOptions.mosquitoNetYardId,
+        TopperDirection: builderOptions.topperDirection,
+        TopHeightInch: String(builderOptions.topHeight),
+        BelowHeightInch: String(builderOptions.belowHeight),
+        KuchiStyle: builderOptions.kuchiStyle,
+        KuchiCount: String(builderOptions.kuchiCount),
+        KuchiGapInch: String(builderOptions.kuchiGap),
+        FitaId: builderOptions.fitaId,
+        FitaStyle: builderOptions.fitaStyle,
+        SutarBobinId: builderOptions.sutarBobinId,
+        LeftWidth: builderOptions.leftWidth + ' inch',
+        RightWidth: builderOptions.rightWidth + ' inch',
+        LeftLength: builderOptions.leftLength + ' inch',
+        RightLength: builderOptions.rightLength + ' inch',
+        MosquitoNetYard: mosquitoNetYard.ProductName || '',
+        TopperNet: topperNet.ProductName || '',
+        BelowCloth: belowCloth?.ProductName || 'No',
+      },
     };
   }
 
   private parseMosquitoNetBuilderOptions(
     options: Record<string, string>,
   ): MosquitoNetBuilderOptions {
+    for (const key of ['IncludeBelowCloth', 'IncludeTopperNet']) {
+      if (!['true', 'false'].includes(options[key]))
+        throw new BadRequestException('Invalid boolean option: ' + key);
+    }
     const parsed = {
       leftWidth: this.getPositiveOptionNumber(options, 'LeftWidthInch'),
       rightWidth: this.getPositiveOptionNumber(options, 'RightWidthInch'),
@@ -357,10 +532,9 @@ export class ClientOrderService {
       belowClothId: options.BelowClothId || '',
       includeTopperNet: options.IncludeTopperNet === 'true',
       topperNetYardId: options.TopperNetYardId || '',
-      topperDirection: this.getRequiredOption(
-        options,
-        'TopperDirection',
-      ) as 'width' | 'length',
+      topperDirection: this.getRequiredOption(options, 'TopperDirection') as
+        | 'width'
+        | 'length',
       topHeight: this.getPositiveOptionNumber(options, 'TopHeightInch'),
       belowHeight: this.getPositiveOptionNumber(options, 'BelowHeightInch'),
       kuchiStyle: this.getRequiredOption(options, 'KuchiStyle') as
@@ -386,20 +560,45 @@ export class ClientOrderService {
       throw new BadRequestException('Topper net is required');
     }
 
+    if (
+      !Number.isInteger(parsed.kuchiCount) ||
+      parsed.kuchiCount < 4 ||
+      parsed.kuchiCount > 10
+    )
+      throw new BadRequestException('Kuchi count must be 4 to 10');
+    if (
+      !Number.isInteger(parsed.kuchiGap) ||
+      parsed.kuchiGap < 2 ||
+      parsed.kuchiGap > 12
+    )
+      throw new BadRequestException('Kuchi gap must be 2 to 12 inches');
+    this.parseFitaStyle(parsed.fitaStyle);
     return parsed;
   }
 
   private getRequiredOption(options: Record<string, string>, key: string) {
-    const value = options[key]?.trim();
+    if (typeof options[key] !== 'string')
+      throw new BadRequestException('Invalid custom option: ' + key);
+    const value = options[key].trim();
     if (!value) {
       throw new BadRequestException(`Missing custom option: ${key}`);
     }
     return value;
   }
 
-  private getPositiveOptionNumber(options: Record<string, string>, key: string) {
-    const value = this.toNumber(this.getRequiredOption(options, key));
-    if (!Number.isFinite(value) || value <= 0) {
+  private getPositiveOptionNumber(
+    options: Record<string, string>,
+    key: string,
+  ) {
+    const text = this.getRequiredOption(options, key);
+    if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(text))
+      throw new BadRequestException('Invalid numeric option: ' + key);
+    const value = Number(text);
+    if (
+      !Number.isFinite(value) ||
+      value < 1 ||
+      value > ORDER_LIMITS.measurementInches
+    ) {
       throw new BadRequestException(`Invalid custom option: ${key}`);
     }
     return value;
@@ -414,10 +613,29 @@ export class ClientOrderService {
     if (!product) {
       throw new BadRequestException(`${label} product not found`);
     }
+    const subcategories: Record<string, string> = {
+      'Mosquito net below cloth': 'MosquitoNetBelowCloth',
+      Fita: 'Fita',
+      'Sutar bobin': 'SutarBobin',
+    };
+    const subcategory = subcategories[label];
+    if (
+      subcategory
+        ? product.Category !== 'Others' || product.SubCategory !== subcategory
+        : product.Category !== 'MosquitoNetYard' ||
+          !PRODUCT_CATEGORY_SUBCATEGORY_MAP.MosquitoNetYard.includes(
+            product.SubCategory,
+          )
+    ) {
+      throw new BadRequestException('Invalid material category for ' + label);
+    }
+    this.getEndUserPrice(product);
     return product;
   }
 
   private parseFitaStyle(style: string) {
+    if (!FITA_STYLES.includes(style))
+      throw new BadRequestException('Invalid fita style');
     const [widthCount, lengthCount] = style.split(':').map(Number);
     if (
       !Number.isFinite(widthCount) ||
@@ -434,11 +652,32 @@ export class ClientOrderService {
     if (!product) {
       return 0;
     }
-    return product.EndUserDiscountedPrice || product.EndUserPrice || 0;
+    const price = product.EndUserDiscountedPrice ?? product.EndUserPrice;
+    if (
+      typeof price !== 'number' ||
+      !Number.isFinite(price) ||
+      price <= 0 ||
+      price > ORDER_LIMITS.unitPrice
+    )
+      throw new BadRequestException('Invalid database product price');
+    return price;
   }
 
-  private toNumber(value?: string | number) {
-    return Number(value) || 0;
+  private getNetHeight(product: Product): number {
+    const raw = product.NetHeight;
+    if (
+      typeof raw !== 'string' ||
+      !/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(raw.trim())
+    )
+      throw new BadRequestException('Invalid database net height');
+    const height = Number(raw);
+    if (
+      !Number.isFinite(height) ||
+      height <= 0 ||
+      height * 12 > ORDER_LIMITS.measurementInches
+    )
+      throw new BadRequestException('Invalid database net height');
+    return height;
   }
 
   private getCouponDiscount(couponCode: string, subtotal: number) {

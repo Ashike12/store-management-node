@@ -1,3 +1,4 @@
+import { OrderOperationsService } from './business/services/order-operations.service';
 import 'reflect-metadata';
 import { Test } from '@nestjs/testing';
 import {
@@ -64,6 +65,7 @@ const invoice = {
   ProductSellInfo: [],
 };
 const order = {
+  RequestId: '12345678-1234-4123-8123-123456789abc',
   CustomerName: 'Test',
   PhoneNumber: '01700000000',
   Division: 'Dhaka',
@@ -105,6 +107,34 @@ type Case = {
   restricted?: boolean;
 };
 const cases: Case[] = [
+  {
+    method: 'post',
+    path: '/business/ListOrders',
+    service: OrderOperationsService,
+    call: 'list',
+    body: { Page: 1, Size: 10 },
+    invalid: { Page: 0 },
+    restricted: true,
+  },
+  {
+    method: 'post',
+    path: '/business/GetOrder',
+    service: OrderOperationsService,
+    call: 'detail',
+    body: { ItemId: 'order-1' },
+    args: ['order-1', user],
+    invalid: {},
+    restricted: true,
+  },
+  {
+    method: 'post',
+    path: '/business/TransitionOrder',
+    service: OrderOperationsService,
+    call: 'transition',
+    body: { ItemId: 'order-1', Status: 'confirmed', ExpectedVersion: 0 },
+    invalid: { Status: 'paid' },
+    restricted: true,
+  },
   {
     method: 'get',
     path: '/',
@@ -253,6 +283,15 @@ const cases: Case[] = [
   },
   {
     method: 'post',
+    path: '/business/QuoteBuilder',
+    service: ClientOrderService,
+    call: 'quoteBuilder',
+    body: { BuildType: 'MosquitoNet', Quantity: 1, CustomOptions: {} },
+    public: true,
+    invalid: { BuildType: 'WindowNet', Quantity: 0, CustomOptions: [] },
+  },
+  {
+    method: 'post',
     path: '/business/CreateClientOrder',
     service: ClientOrderService,
     call: 'createOrder',
@@ -295,6 +334,7 @@ const cases: Case[] = [
     call: 'createInvoice',
     body: invoice,
     invalid: {},
+    args: [invoice, user],
     restricted: true,
   },
   {
@@ -304,6 +344,7 @@ const cases: Case[] = [
     call: 'updateInvoice',
     body: { ...invoice, ItemId: 'test-id' },
     invalid: {},
+    args: [{ ...invoice, ItemId: 'test-id' }, user],
     restricted: true,
   },
   {
@@ -312,8 +353,8 @@ const cases: Case[] = [
     service: InvoiceService,
     call: 'getInvoiceList',
     body: { ItemId: '' },
-    invalid: {},
-    args: [{}, { ItemId: '' }, user],
+    invalid: { ItemId: 123 },
+    args: [{}, { ItemId: '', WholesalerId: null }, user],
   },
   {
     method: 'post',
@@ -322,7 +363,7 @@ const cases: Case[] = [
     call: 'deleteInvoiceById',
     body: { ItemId: 'test-id' },
     invalid: {},
-    args: ['test-id'],
+    args: ['test-id', user],
     restricted: true,
   },
   {
@@ -420,7 +461,9 @@ describe('API HTTP contracts (services mocked; no live infrastructure)', () => {
           req.user =
             req.headers.authorization === 'Bearer wholesaler'
               ? { _id: 'wholesaler-1', Roles: ['wholesaler'] }
-              : user;
+              : req.headers.authorization === 'Bearer appuser'
+                ? { _id: 'appuser-1', Roles: ['appuser'] }
+                : user;
           return true;
         },
       })
@@ -550,6 +593,51 @@ describe('API HTTP contracts (services mocked; no live infrastructure)', () => {
       .expect(200);
     expect(mocks.get(AuthService).getAnonymousToken).toHaveBeenCalledTimes(1);
   });
+  it.each(['/business/GetInvoice', '/business/GetDashboardData'])(
+    'blocks non-admin, non-wholesaler invoice read access for %s',
+    async (path) => {
+      const c = cases.find((item) => item.path === path);
+      await send(c, c.body, 'appuser').expect(403);
+      expect(mocks.get(c.service)[c.call]).not.toHaveBeenCalled();
+    },
+  );
+  it.each([
+    '/business/CreateInvoice',
+    '/business/UpdateInvoice',
+    '/business/DeleteInvoice',
+  ])('blocks non-admin invoice mutation access for %s', async (path) => {
+    const c = cases.find((item) => item.path === path);
+    await send(c, c.body, 'appuser').expect(403);
+    expect(mocks.get(c.service)[c.call]).not.toHaveBeenCalled();
+  });
+  it.each([
+    { ...invoice, PaymentAmount: '100' },
+    { ...invoice, PaymentAmount: -1 },
+    { ...invoice, UnexpectedField: true },
+    {
+      PaymentAmount: 100,
+      InvoiceType: 'WHOLESALE',
+      WholeSalerId: 'wholesaler-1',
+      ProductSellInfo: [
+        { ProductId: 'product-1', SellingPrice: 100, Quantity: 0 },
+      ],
+    },
+    {
+      PaymentAmount: 100,
+      InvoiceType: 'WHOLESALE',
+      WholeSalerId: 'wholesaler-1',
+      ProductSellInfo: [
+        { ProductId: 'product-1', SellingPrice: '100', Quantity: 1 },
+      ],
+    },
+  ])(
+    'rejects malformed invoice numbers before service execution',
+    async (body) => {
+      const c = cases.find((item) => item.path === '/business/CreateInvoice');
+      await send(c, body).expect(400);
+      expect(mocks.get(InvoiceService).createInvoice).not.toHaveBeenCalled();
+    },
+  );
   it('rejects an unknown token grant', async () => {
     await request(app.getHttpServer())
       .post('/auth/token')
@@ -557,7 +645,7 @@ describe('API HTTP contracts (services mocked; no live infrastructure)', () => {
       .expect(400);
     expect(mocks.get(AuthService).login).not.toHaveBeenCalled();
   });
-  it.each(['GetClientProducts', 'CreateClientOrder'])(
+  it.each(['GetClientProducts', 'CreateClientOrder', 'QuoteBuilder'])(
     'rate-limits %s',
     async (route) => {
       redis.incrementWithExpiryInSecond.mockResolvedValue(11);
@@ -566,6 +654,25 @@ describe('API HTTP contracts (services mocked; no live infrastructure)', () => {
       expect(mocks.get(c.service)[c.call]).not.toHaveBeenCalled();
     },
   );
+  it('rejects client prices on the quote request', async () => {
+    await request(app.getHttpServer())
+      .post('/business/QuoteBuilder')
+      .send({
+        BuildType: 'MosquitoNet',
+        Quantity: 1,
+        CustomOptions: {},
+        UnitPrice: 1,
+      })
+      .expect(400);
+    expect(mocks.get(ClientOrderService).quoteBuilder).not.toHaveBeenCalled();
+  });
+  it('rejects an unsupported product height unit', async () => {
+    await request(app.getHttpServer())
+      .post('/business/CreateProduct')
+      .set('Authorization', 'Bearer admin')
+      .send({ ...product, NetHeightUnit: 'inch' })
+      .expect(400);
+  });
   it('passes pagination to the product service', async () => {
     await request(app.getHttpServer())
       .post('/business/GetProducts?pageSize=10&pageNumber=2')
@@ -607,6 +714,40 @@ describe('API HTTP contracts (services mocked; no live infrastructure)', () => {
       expect.objectContaining({ originalname: 'test.txt', size: 7 }),
       user,
       'customer-1',
+    );
+  });
+
+  it.each(['', '   ', '123', '01200000000', '017000000000', 1700000000])(
+    'rejects invalid checkout contact phone %j',
+    async (PhoneNumber) => {
+      await request(app.getHttpServer())
+        .post('/business/CreateClientOrder')
+        .send({ ...order, PhoneNumber })
+        .expect(400);
+      expect(mocks.get(ClientOrderService).createOrder).not.toHaveBeenCalled();
+    },
+  );
+  it('accepts a formatted Bangladesh mobile number without payment selection', async () => {
+    await request(app.getHttpServer())
+      .post('/business/CreateClientOrder')
+      .send({ ...order, PhoneNumber: '+880 1700-000000' })
+      .expect(200);
+    expect(mocks.get(ClientOrderService).createOrder).toHaveBeenCalled();
+  });
+  it('accepts only boolean NeedsAction filters', async () => {
+    await request(app.getHttpServer())
+      .post('/business/ListOrders')
+      .set('Authorization', 'Bearer admin')
+      .send({ NeedsAction: 'true' })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/business/ListOrders')
+      .set('Authorization', 'Bearer admin')
+      .send({ NeedsAction: true })
+      .expect(200);
+    expect(mocks.get(OrderOperationsService).list).toHaveBeenCalledWith(
+      expect.objectContaining({ NeedsAction: true }),
+      user,
     );
   });
 });

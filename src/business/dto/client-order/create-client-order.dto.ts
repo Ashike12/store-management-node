@@ -1,6 +1,16 @@
-import { Type } from 'class-transformer';
+import {
+  BD_MOBILE_PATTERN,
+  normalizeOrderPhone,
+} from '../../../shared/constant/order-payment.constant';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMinSize,
+  ArrayMaxSize,
+  IsInt,
+  Matches,
+  IsUUID,
+  Min,
+  Max,
   IsArray,
   IsIn,
   IsNotEmpty,
@@ -10,6 +20,7 @@ import {
   IsString,
   ValidateNested,
 } from 'class-validator';
+import { ORDER_LIMITS } from '../../../shared/constant/order-validation.constant';
 
 export class CreateClientOrderItemDto {
   @IsString()
@@ -33,9 +44,13 @@ export class CreateClientOrderItemDto {
   readonly ImageLinks: string[];
 
   @IsNumber()
+  @Min(0.01)
+  @Max(ORDER_LIMITS.unitPrice)
   readonly UnitPrice: number;
 
-  @IsNumber()
+  @IsInt()
+  @Min(1)
+  @Max(ORDER_LIMITS.quantity)
   readonly Quantity: number;
 
   @IsOptional()
@@ -44,12 +59,20 @@ export class CreateClientOrderItemDto {
 }
 
 export class CreateClientOrderDto {
+  @IsUUID(4)
+  readonly RequestId: string;
+
   @IsString()
   @IsNotEmpty()
   readonly CustomerName: string;
 
   @IsString()
   @IsNotEmpty()
+  @Transform(({ value }) => normalizeOrderPhone(value))
+  @Matches(BD_MOBILE_PATTERN, {
+    message:
+      'A valid Bangladesh mobile number is required so our sales team can contact you',
+  })
   readonly PhoneNumber: string;
 
   @IsString()
@@ -90,6 +113,7 @@ export class CreateClientOrderDto {
 
   @IsArray()
   @ArrayMinSize(1)
+  @ArrayMaxSize(ORDER_LIMITS.items)
   @ValidateNested({ each: true })
   @Type(() => CreateClientOrderItemDto)
   readonly Items: CreateClientOrderItemDto[];

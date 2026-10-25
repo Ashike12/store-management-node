@@ -21,7 +21,8 @@
     "test:cov": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
     "test:debug": "node --inspect-brk --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
     "test:e2e": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./test/jest-e2e.json",
-    "typecheck": "tsc --noEmit --incremental false"
+    "typecheck": "tsc --noEmit --incremental false",
+    "test:integration": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./test/jest-integration.json --runInBand"
   },
   "dependencies": {
     "@nestjs/common": "12.2.0",
@@ -65,6 +66,7 @@
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-prettier": "5.5.4",
     "jest": "30.5.2",
+    "mongodb-memory-server-core": "11.3.0",
     "nodemon": "3.1.4",
     "prettier": "3.6.2",
     "source-map-support": "0.5.20",

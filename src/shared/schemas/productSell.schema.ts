@@ -5,29 +5,34 @@ import { RootSchema } from './root.schema';
   timestamps: true,
 })
 export class ProductSell extends RootSchema {
-  @Prop()
+  @Prop({ required: true })
   ProductId: string;
 
-  @Prop()
+  @Prop({ required: true })
   ProductName: string;
 
-  @Prop()
+  @Prop({ required: true, min: 0 })
   SellingPrice: number;
 
-  @Prop()
+  @Prop({ required: true, min: 0 })
+  MakingPrice: number;
+
+  @Prop({ required: true, min: 0.000001 })
   Quantity: number;
 
   @Prop()
   SellingDate: Date;
 
-  @Prop()
+  @Prop({ default: '' })
   WholeSalerId: string;
 
-  @Prop()
+  @Prop({ default: '' })
   WholeSalerName: string;
 
-  @Prop()
+  @Prop({ required: true })
   InvoiceId: string;
 }
 
 export const ProductSellSchema = SchemaFactory.createForClass(ProductSell);
+ProductSellSchema.index({ InvoiceId: 1 });
+ProductSellSchema.index({ WholeSalerId: 1, CreatedDate: -1 });

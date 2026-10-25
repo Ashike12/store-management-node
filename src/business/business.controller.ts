@@ -1,3 +1,9 @@
+import { OrderOperationsService } from './services/order-operations.service';
+import {
+  ListOrdersDto,
+  OrderDetailsDto,
+  TransitionOrderDto,
+} from './dto/client-order/order-operations.dto';
 import {
   Controller,
   Post,
@@ -7,6 +13,8 @@ import {
   Query,
   Req,
   ForbiddenException,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { QueryRespone } from '../shared/response/query.response';
@@ -31,9 +39,12 @@ import { RateLimitGuard } from '../guards/rate-limit.guard';
 import { GenerateAiSuggestionDto } from './dto/ai-suggestion/generate-ai-suggestion.dto';
 import { AiSuggestionService } from './services/ai-suggestion.service';
 
+import { QuoteBuilderDto } from './dto/client-order/quote-builder.dto';
+
 @Controller('business')
 export class BusinessController {
   constructor(
+    private orderOperations: OrderOperationsService,
     private productService: ProductService,
     private invoiceService: InvoiceService,
     private clientOrderService: ClientOrderService,
@@ -47,6 +58,55 @@ export class BusinessController {
     ) {
       throw new ForbiddenException('Wholesaler accounts have read-only access');
     }
+  }
+
+  private ensureAdmin(user?: User) {
+    if (!user?.Roles?.includes(UserRoles.Admin))
+      throw new ForbiddenException('Admin access required');
+  }
+
+  private ensureInvoiceReadAccess(user?: User) {
+    if (
+      !user?.Roles?.includes(UserRoles.Admin) &&
+      !user?.Roles?.includes(UserRoles.WholeSaler)
+    ) {
+      throw new ForbiddenException(
+        'Invoice access requires admin or wholesaler',
+      );
+    }
+  }
+
+  @Post('ListOrders')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
+  ListOrders(@Body() dto: ListOrdersDto, @Req() req: Request) {
+    this.ensureAdmin(req['user'] as User);
+    return this.orderOperations.list(dto, req['user'] as User);
+  }
+
+  @Post('GetOrder')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
+  GetOrder(@Body() dto: OrderDetailsDto, @Req() req: Request) {
+    this.ensureAdmin(req['user'] as User);
+    return this.orderOperations.detail(dto.ItemId, req['user'] as User);
+  }
+
+  @Post('TransitionOrder')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
+  TransitionOrder(@Body() dto: TransitionOrderDto, @Req() req: Request) {
+    this.ensureAdmin(req['user'] as User);
+    return this.orderOperations.transition(dto, req['user'] as User);
   }
 
   @Post('GetProducts')
@@ -69,6 +129,14 @@ export class BusinessController {
     @Body() dto: GetProductDto,
   ): Promise<QueryRespone> {
     return this.productService.getClientProduct(query, dto);
+  }
+
+  @Post('QuoteBuilder')
+  @HttpCode(200)
+  @UseGuards(RateLimitGuard())
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
+  QuoteBuilder(@Body() dto: QuoteBuilderDto): Promise<CommandResponse> {
+    return this.clientOrderService.quoteBuilder(dto);
   }
 
   @Post('CreateClientOrder')
@@ -118,46 +186,78 @@ export class BusinessController {
   @Post('CreateInvoice')
   @HttpCode(200)
   @UseGuards(AuthGuard())
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
   CreateInvoice(
     @Body() dto: CreateInvoiceDto,
     @Req() req: Request,
   ): Promise<CommandResponse> {
-    this.ensureWholesalerReadOnly(req['user'] as User);
-    return this.invoiceService.createInvoice(dto);
+    const user = req['user'] as User;
+    this.ensureAdmin(user);
+    return this.invoiceService.createInvoice(dto, user);
   }
 
   @Post('UpdateInvoice')
   @HttpCode(200)
   @UseGuards(AuthGuard())
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
   UpdateInvoice(
     @Body() dto: UpdateInvoiceDto,
     @Req() req: Request,
   ): Promise<CommandResponse> {
-    this.ensureWholesalerReadOnly(req['user'] as User);
-    return this.invoiceService.updateInvoice(dto);
+    const user = req['user'] as User;
+    this.ensureAdmin(user);
+    return this.invoiceService.updateInvoice(dto, user);
   }
 
   @Post('GetInvoice')
   @HttpCode(200)
   @UseGuards(AuthGuard())
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
   GetInvoice(
     @Query() query: ExpressQuery,
     @Body() dto: GetInvoiceDto,
     @Req() req: Request,
   ): Promise<QueryRespone> {
     const user = req['user'] as User;
+    this.ensureInvoiceReadAccess(user);
     return this.invoiceService.getInvoiceList(query, dto, user);
   }
 
   @Post('DeleteInvoice')
   @HttpCode(200)
   @UseGuards(AuthGuard())
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
   DeleteInvoice(
     @Body() dto: DeleteProductDto,
     @Req() req: Request,
   ): Promise<CommandResponse> {
-    this.ensureWholesalerReadOnly(req['user'] as User);
-    return this.invoiceService.deleteInvoiceById(dto.ItemId);
+    const user = req['user'] as User;
+    this.ensureAdmin(user);
+    return this.invoiceService.deleteInvoiceById(dto.ItemId, user);
   }
 
   @Post('GetDashboardData')
@@ -165,6 +265,7 @@ export class BusinessController {
   @UseGuards(AuthGuard())
   GetDashboardData(@Req() req: Request): Promise<QueryRespone> {
     const user = req['user'] as User;
+    this.ensureInvoiceReadAccess(user);
     return this.invoiceService.getDashboardStatsData(user);
   }
 

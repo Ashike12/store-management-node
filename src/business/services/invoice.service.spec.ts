@@ -1,13 +1,18 @@
 import { InvoiceService } from './invoice.service';
 
-describe('InvoiceService accounting and ownership baseline', () => {
+describe('InvoiceService access, validation and reporting', () => {
+  const session = {
+    withTransaction: jest.fn(),
+    endSession: jest.fn(),
+  };
   const invoices = {
+    db: { startSession: jest.fn() },
     create: jest.fn(),
     find: jest.fn(),
     countDocuments: jest.fn(),
     findOne: jest.fn(),
-    findByIdAndDelete: jest.fn(),
-    findByIdAndUpdate: jest.fn(),
+    updateOne: jest.fn(),
+    deleteOne: jest.fn(),
     aggregate: jest.fn(),
   };
   const sells = {
@@ -16,270 +21,280 @@ describe('InvoiceService accounting and ownership baseline', () => {
     deleteMany: jest.fn(),
     aggregate: jest.fn(),
   };
-  const products = { findOne: jest.fn() };
+  const products = { findOne: jest.fn(), updateOne: jest.fn() };
   const users = { findOne: jest.fn() };
-  const productService = { updateProduct: jest.fn() };
-  const query = { sort: jest.fn(), limit: jest.fn(), skip: jest.fn() };
-  let service: InvoiceService;
+  const invoiceQuery = {
+    sort: jest.fn(),
+    limit: jest.fn(),
+    skip: jest.fn(),
+  };
+  const admin = { _id: 'admin', Roles: ['admin'] } as any;
+  const wholesaler = { _id: 'owner', Roles: ['wholesaler'] } as any;
   const due = {
     InvoiceType: 'DUE_PAYMENT',
     PaymentAmount: 100,
     WholeSalerId: 'owner',
     ProductSellInfo: [],
   };
+  let service: InvoiceService;
+  let uid = 0;
+
+  const sessionResult = <T>(value: T) => ({
+    session: jest.fn().mockResolvedValue(value),
+  });
+
   beforeEach(() => {
-    for (const group of [
-      invoices,
-      sells,
-      products,
-      users,
-      productService,
-      query,
-    ])
-      for (const fn of Object.values(group)) fn.mockReset();
-    users.findOne.mockResolvedValue({
-      _id: 'owner',
-      FirstName: 'Test',
-      LastName: 'User',
-    });
-    invoices.find.mockReturnValue(query);
-    query.sort.mockReturnValue(query);
-    query.limit.mockReturnValue(query);
-    query.skip.mockResolvedValue([
+    jest.clearAllMocks();
+    uid = 0;
+    session.withTransaction.mockImplementation(async (operation) =>
+      operation(),
+    );
+    session.endSession.mockResolvedValue(undefined);
+    invoices.db.startSession.mockResolvedValue(session);
+    invoices.find.mockReturnValue(invoiceQuery);
+    invoiceQuery.sort.mockReturnValue(invoiceQuery);
+    invoiceQuery.limit.mockReturnValue(invoiceQuery);
+    invoiceQuery.skip.mockResolvedValue([
       {
         toObject: () => ({
           _id: 'invoice-1',
           ...due,
           TotalAmount: 100,
-          ProfitMargin: 100,
+          ProductCostAmount: 0,
+          GrossProfit: 0,
+          RealizedCashMargin: 100,
         }),
       },
     ]);
     invoices.countDocuments.mockResolvedValue(1);
+    invoices.aggregate.mockResolvedValue([]);
     sells.find.mockResolvedValue([]);
+    users.findOne.mockReturnValue(
+      sessionResult({
+        _id: 'owner',
+        FirstName: 'Test',
+        LastName: 'User',
+        DisplayName: 'Test User',
+        Roles: ['wholesaler'],
+      }),
+    );
+    invoices.create.mockResolvedValue([]);
     service = new InvoiceService(
       products as any,
       sells as any,
       invoices as any,
       users as any,
-      { getUid: () => 'invoice-1' } as any,
-      productService as any,
+      { getUid: () => `id-${++uid}` } as any,
     );
   });
-  it('records due payment totals without touching stock or product sales', async () => {
-    await service.createInvoice(due);
-    expect(invoices.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        TotalAmount: 100,
-        PaymentAmount: 100,
-        ProfitMargin: 100,
-        InvoiceType: 'DUE_PAYMENT',
-      }),
+
+  it.each([
+    undefined,
+    { _id: 'customer', Roles: ['customer'] },
+    { _id: 'appuser', Roles: ['appuser'] },
+    { _id: 'owner', Roles: ['wholesaler'] },
+  ])('blocks invoice mutations without admin role: %j', async (user) => {
+    await expect(service.createInvoice(due, user as any)).rejects.toMatchObject(
+      {
+        status: 403,
+      },
     );
-    expect(sells.insertMany).not.toHaveBeenCalled();
-    expect(productService.updateProduct).not.toHaveBeenCalled();
-  });
-  it('requires products for a consumer invoice', async () => {
     await expect(
-      service.createInvoice({ ...due, InvoiceType: 'CONSUMER' }),
-    ).rejects.toThrow('At least one product');
-    expect(invoices.create).not.toHaveBeenCalled();
-  });
-  it('requires a wholesaler for a due payment', async () => {
+      service.updateInvoice({ ...due, ItemId: 'invoice-1' }, user as any),
+    ).rejects.toMatchObject({ status: 403 });
     await expect(
-      service.createInvoice({ ...due, WholeSalerId: '' }),
-    ).rejects.toThrow('Wholesaler is required');
+      service.deleteInvoiceById('invoice-1', user as any),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(invoices.db.startSession).not.toHaveBeenCalled();
   });
-  it('rejects an unknown wholesaler', async () => {
-    users.findOne.mockResolvedValue(null);
-    await expect(service.createInvoice(due)).rejects.toThrow(
-      'Wholesaler not found',
-    );
+
+  it.each([
+    undefined,
+    { _id: 'customer', Roles: ['customer'] },
+    { _id: 'appuser', Roles: ['appuser'] },
+  ])(
+    'blocks invoice reads without admin or wholesaler role: %j',
+    async (user) => {
+      await expect(
+        service.getInvoiceList({ size: '10' }, { ItemId: '' }, user as any),
+      ).rejects.toMatchObject({ status: 403 });
+      await expect(
+        service.getDashboardStatsData(user as any),
+      ).rejects.toMatchObject({ status: 403 });
+    },
+  );
+
+  it('rejects product rows on due-payment invoices', async () => {
+    await expect(
+      service.createInvoice(
+        {
+          ...due,
+          ProductSellInfo: [
+            { ProductId: 'net', SellingPrice: 10, Quantity: 1 },
+          ],
+        },
+        admin,
+      ),
+    ).rejects.toThrow('cannot contain products');
+    expect(invoices.db.startSession).not.toHaveBeenCalled();
   });
-  it('forces wholesaler ownership even when another owner is requested', async () => {
+
+  it.each([
+    { size: '0' },
+    { size: '101' },
+    { size: 'invalid' },
+    { page: '0' },
+    { page: '1.5' },
+  ])('rejects invalid invoice pagination: %j', async (query) => {
+    await expect(
+      service.getInvoiceList(query as any, { ItemId: '' }, admin),
+    ).rejects.toThrow('Invalid invoice pagination');
+    expect(invoices.find).not.toHaveBeenCalled();
+  });
+
+  it('forces wholesaler ownership and removes profit from list responses', async () => {
     const result = await service.getInvoiceList(
       { size: '10', page: '1' },
       { ItemId: '', WholesalerId: 'other' },
-      { _id: 'owner', Roles: ['wholesaler'] } as any,
+      wholesaler,
     );
     expect(invoices.find).toHaveBeenCalledWith({ WholeSalerId: 'owner' });
     expect(invoices.countDocuments).toHaveBeenCalledWith({
       WholeSalerId: 'owner',
     });
-    expect(result.Data[0]).not.toHaveProperty('ProfitMargin');
+    expect(result.Data[0]).not.toHaveProperty('ProductCostAmount');
+    expect(result.Data[0]).not.toHaveProperty('GrossProfit');
+    expect(result.Data[0]).not.toHaveProperty('RealizedCashMargin');
   });
-  it('scopes invoice details to the logged-in wholesaler', async () => {
-    query.skip.mockResolvedValue([]);
-    await expect(
-      service.getInvoiceList({ size: '10' }, { ItemId: 'other-invoice' }, {
-        _id: 'owner',
-        Roles: ['wholesaler'],
-      } as any),
-    ).rejects.toThrow('Data not found');
-    expect(invoices.find).toHaveBeenCalledWith({
-      _id: 'other-invoice',
+
+  it('scopes detail sale rows to the owning wholesaler', async () => {
+    await service.getInvoiceList(
+      { size: '10' },
+      { ItemId: 'invoice-1' },
+      wholesaler,
+    );
+    expect(sells.find).toHaveBeenCalledWith({
+      InvoiceId: 'invoice-1',
       WholeSalerId: 'owner',
     });
-    expect(sells.find).not.toHaveBeenCalled();
   });
-  it('keeps profit visible in admin results', async () => {
+
+  it('treats a user with admin and wholesaler roles as admin', async () => {
     const result = await service.getInvoiceList(
       { size: '10' },
       { ItemId: '' },
-      { Roles: ['admin'] } as any,
+      { _id: 'owner', Roles: ['wholesaler', 'admin'] } as any,
     );
-    expect(result.Data[0].ProfitMargin).toBe(100);
+    expect(invoices.find).toHaveBeenCalledWith({});
+    expect(result.Data[0].RealizedCashMargin).toBe(100);
   });
-  it('rejects deleting a nonexistent invoice', async () => {
-    invoices.findOne.mockResolvedValue(null);
-    await expect(service.deleteInvoiceById('missing')).rejects.toThrow(
-      'Data not found',
+
+  it('combines admin invoice and wholesaler filters', async () => {
+    await service.getInvoiceList(
+      { size: '10' },
+      { ItemId: 'invoice-1', WholesalerId: 'owner' },
+      admin,
     );
-    expect(invoices.findByIdAndDelete).not.toHaveBeenCalled();
+    expect(invoices.find).toHaveBeenCalledWith({
+      _id: 'invoice-1',
+      WholeSalerId: 'owner',
+    });
   });
-  it('creates product sales using supplied sale price and reduces stock', async () => {
-    products.findOne.mockResolvedValue({
-      ProductName: 'Net',
-      MakingPrice: 100,
-      Quantity: 10,
-    });
-    await service.createInvoice({
-      InvoiceType: 'CONSUMER',
-      WholeSalerId: '',
-      PaymentAmount: 300,
-      ProductSellInfo: [{ ProductId: 'net', SellingPrice: 150, Quantity: 2 }],
-    });
-    expect(productService.updateProduct).toHaveBeenCalledWith({
-      ItemId: 'net',
-      Quantity: 8,
-    });
-    expect(invoices.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        TotalAmount: 300,
-        PaymentAmount: 300,
-        ProfitMargin: 100,
-      }),
-    );
-    expect(sells.insertMany).toHaveBeenCalledWith([
-      expect.objectContaining({
-        ProductId: 'net',
-        Quantity: 2,
-        SellingPrice: 150,
-      }),
-    ]);
-  });
-  it('restores previous sold quantity before applying an invoice edit', async () => {
-    invoices.findOne.mockResolvedValue({ _id: 'invoice-1' });
-    sells.find.mockResolvedValue([{ ProductId: 'net', Quantity: 2 }]);
-    products.findOne
-      .mockResolvedValueOnce({ Quantity: 8 })
-      .mockResolvedValueOnce({
-        ProductName: 'Net',
-        Quantity: 10,
-        MakingPrice: 100,
-      });
-    await service.updateInvoice({
-      ItemId: 'invoice-1',
-      InvoiceType: 'CONSUMER',
-      WholeSalerId: '',
-      PaymentAmount: 450,
-      ProductSellInfo: [
-        {
-          ItemId: 'old-sale',
-          ProductId: 'net',
-          Quantity: 3,
-          SellingPrice: 150,
-        },
-      ],
-    });
-    expect(productService.updateProduct).toHaveBeenNthCalledWith(1, {
-      ItemId: 'net',
-      Quantity: 10,
-    });
-    expect(productService.updateProduct).toHaveBeenNthCalledWith(2, {
-      ItemId: 'net',
-      Quantity: 7,
-    });
-    expect(sells.deleteMany).toHaveBeenCalledWith({ InvoiceId: 'invoice-1' });
-    expect(invoices.findByIdAndUpdate).toHaveBeenCalledWith(
-      'invoice-1',
-      expect.objectContaining({
-        TotalAmount: 450,
-        PaymentAmount: 450,
-        ProfitMargin: 150,
-      }),
-      { new: true, runValidators: true },
-    );
-  });
-  it('updates due-payment totals without creating product sales', async () => {
-    invoices.findOne.mockResolvedValue({ _id: 'invoice-1' });
-    await service.updateInvoice({
-      ...due,
-      ItemId: 'invoice-1',
-      PaymentAmount: 200,
-    });
-    expect(invoices.findByIdAndUpdate).toHaveBeenCalledWith(
-      'invoice-1',
-      expect.objectContaining({
-        TotalAmount: 200,
-        PaymentAmount: 200,
-        ProfitMargin: 200,
-      }),
-      { new: true, runValidators: true },
-    );
-    expect(sells.insertMany).not.toHaveBeenCalled();
-  });
-  it('rejects an edit of a missing invoice before touching stock', async () => {
-    invoices.findOne.mockResolvedValue(null);
-    await expect(
-      service.updateInvoice({ ...due, ItemId: 'missing' }),
-    ).rejects.toThrow('Invoice not found');
-    expect(productService.updateProduct).not.toHaveBeenCalled();
-  });
-  it.each([{ InvoiceType: 'CONSUMER' }, { WholeSalerId: '' }])(
-    'rejects invalid edits before deleting old sales: %j',
-    async (overrides) => {
-      invoices.findOne.mockResolvedValue({ _id: 'invoice-1' });
-      await expect(
-        service.updateInvoice({ ...due, ItemId: 'invoice-1', ...overrides }),
-      ).rejects.toMatchObject({ status: 400 });
-      expect(sells.deleteMany).not.toHaveBeenCalled();
+
+  it.each([
+    [{ ...due, PaymentAmount: Number.NaN }, 'Payment amount'],
+    [{ ...due, PaymentAmount: 0 }, 'greater than 0'],
+    [
+      {
+        ...due,
+        InvoiceType: 'CONSUMER',
+        WholeSalerId: 'owner',
+        ProductSellInfo: [{ ProductId: 'net', SellingPrice: 10, Quantity: 1 }],
+      },
+      'cannot be assigned',
+    ],
+    [
+      {
+        ...due,
+        InvoiceType: 'CONSUMER',
+        WholeSalerId: '',
+        ProductSellInfo: [{ ProductId: 'net', SellingPrice: 10, Quantity: -1 }],
+      },
+      'quantity',
+    ],
+  ])(
+    'rejects invalid invoice input before opening a transaction',
+    async (dto, message) => {
+      await expect(service.createInvoice(dto as any, admin)).rejects.toThrow(
+        message as string,
+      );
+      expect(invoices.db.startSession).not.toHaveBeenCalled();
     },
   );
-  it('returns safe invoice details to a wholesaler', async () => {
-    sells.find.mockResolvedValue([
-      {
-        _id: 'sale-1',
-        InvoiceId: 'invoice-1',
-        ProductName: 'Net',
-        SellingPrice: 150,
-        MakingPrice: 100,
-      },
-    ]);
-    const result = await service.getInvoiceList(
-      { size: '10' },
-      { ItemId: 'invoice-1' },
-      { _id: 'owner', Roles: ['wholesaler'] } as any,
+
+  it('creates due payments transactionally without stock or product-sale writes', async () => {
+    await service.createInvoice(due, admin);
+    expect(session.withTransaction).toHaveBeenCalledTimes(1);
+    expect(invoices.create).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          TotalAmount: 100,
+          PaymentAmount: 100,
+          ProductCostAmount: 0,
+          GrossProfit: 0,
+          RealizedCashMargin: 100,
+          InvoiceType: 'DUE_PAYMENT',
+          WholeSalerId: 'owner',
+        }),
+      ],
+      { session },
     );
-    expect(result.Data).not.toHaveProperty('ProfitMargin');
-    expect(result.Data.ProductSellInfo[0]).not.toHaveProperty('MakingPrice');
-    expect(result.Data.ProductSellInfo[0].SellingPrice).toBe(150);
+    expect(sells.insertMany).not.toHaveBeenCalled();
+    expect(products.updateOne).not.toHaveBeenCalled();
+    expect(session.endSession).toHaveBeenCalledTimes(1);
   });
+
+  it('rejects users without the wholesaler role as invoice owners', async () => {
+    users.findOne.mockReturnValue(
+      sessionResult({ _id: 'owner', Roles: ['customer'] }),
+    );
+    await expect(service.createInvoice(due, admin)).rejects.toThrow(
+      'Wholesaler not found',
+    );
+    expect(invoices.create).not.toHaveBeenCalled();
+    expect(session.endSession).toHaveBeenCalledTimes(1);
+  });
+
   it.each([true, false])(
     'scopes dashboard queries and shapes results for wholesaler=%s',
-    async (wholesaler) => {
+    async (asWholesaler) => {
       invoices.aggregate.mockResolvedValue([]);
       sells.aggregate.mockResolvedValue([]);
-      query.limit.mockResolvedValue([
-        { toObject: () => ({ ...due, TotalAmount: 0, ProfitMargin: 0 }) },
+      invoiceQuery.limit.mockResolvedValue([
+        {
+          toObject: () => ({
+            ...due,
+            TotalAmount: 0,
+            ProductCostAmount: 0,
+            GrossProfit: 0,
+            RealizedCashMargin: 0,
+          }),
+        },
       ]);
-      const result = await service.getDashboardStatsData({
-        _id: 'owner',
-        Roles: [wholesaler ? 'wholesaler' : 'admin'],
-      } as any);
-      const scope = wholesaler ? { WholeSalerId: 'owner' } : {};
+      const result = await service.getDashboardStatsData(
+        asWholesaler ? wholesaler : admin,
+      );
+      const scope = asWholesaler ? { WholeSalerId: 'owner' } : {};
       expect(invoices.find).toHaveBeenCalledWith(scope);
-      expect(invoices.countDocuments).toHaveBeenCalledWith(scope);
+      expect(invoices.countDocuments).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ...scope,
+          CreatedDate: expect.objectContaining({
+            $gte: expect.any(String),
+            $lt: expect.any(String),
+          }),
+        }),
+      );
       for (const [pipeline] of [
         ...invoices.aggregate.mock.calls,
         ...sells.aggregate.mock.calls,
@@ -288,28 +303,46 @@ describe('InvoiceService accounting and ownership baseline', () => {
           expect.objectContaining(scope),
         );
       }
-      expect(result.Data.RecentInvoiceData[0].TotalAmount).toBe(100);
-      if (wholesaler) {
+      if (asWholesaler) {
         expect(Object.keys(result.Data).sort()).toEqual([
           'RecentInvoiceData',
           'ThisMonthTotalInvoice',
-          'TotalDueAmount',
+          'TotalCustomerCredit',
+          'TotalOutstandingDue',
         ]);
         expect(result.Data.RecentInvoiceData[0]).not.toHaveProperty(
-          'ProfitMargin',
+          'GrossProfit',
+        );
+        expect(result.Data.RecentInvoiceData[0]).not.toHaveProperty(
+          'RealizedCashMargin',
         );
       } else {
-        expect(result.Data).toHaveProperty('ThisMonthRevenue', 0);
-        expect(result.Data.RecentInvoiceData[0].ProfitMargin).toBe(100);
+        expect(result.Data).toHaveProperty('ThisMonthGrossProfit', 0);
+        expect(result.Data).toHaveProperty('ThisMonthRealizedCashMargin', 0);
+        expect(result.Data.RecentInvoiceData[0].RealizedCashMargin).toBe(100);
       }
     },
   );
-  it('reads aggregated revenue, sales and due totals', async () => {
-    invoices.aggregate
-      .mockResolvedValueOnce([{ totalRevenue: 300 }])
-      .mockResolvedValueOnce([{ totalDueAmount: 80 }]);
+
+  it('reads financial, sales and due summaries', async () => {
+    invoices.aggregate.mockResolvedValue([
+      {
+        TotalBilled: 500,
+        ProductCostAmount: 350,
+        CashCollected: 420,
+        GrossProfit: 150,
+        RealizedCashMargin: 70,
+        OutstandingDue: 80,
+        CustomerCredit: 0,
+        CostAtRisk: 0,
+      },
+    ]);
     sells.aggregate.mockResolvedValue([{ totalSell: 5 }]);
-    expect(await service.getThisMonthRevenue()).toBe(300);
+    expect(await service.getFinancialSummary()).toMatchObject({
+      GrossProfit: 150,
+      RealizedCashMargin: 70,
+      OutstandingDue: 80,
+    });
     expect(await service.getTotalDueAmount()).toBe(80);
     expect(await service.getThisMonthTotalSold()).toBe(5);
   });
