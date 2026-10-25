@@ -22,6 +22,17 @@ import { startOfMonth, addMonths } from 'date-fns';
 import { UserRoles } from '../../shared/constant/roles.constant';
 import { ORDER_LIMITS } from '../../shared/constant/order-validation.constant';
 
+type InvoiceFinancialSummary = {
+  TotalBilled: number;
+  ProductCostAmount: number;
+  CashCollected: number;
+  GrossProfit: number;
+  RealizedCashMargin: number;
+  OutstandingDue: number;
+  CustomerCredit: number;
+  CostAtRisk: number;
+};
+
 @Injectable()
 export class InvoiceService {
   constructor(
@@ -96,8 +107,26 @@ export class InvoiceService {
       return invoice;
     }
 
-    const { ProfitMargin, ...safeInvoice } = invoice;
+    const {
+      ProductCostAmount,
+      GrossProfit,
+      RealizedCashMargin,
+      ...safeInvoice
+    } = invoice;
     return safeInvoice as T;
+  }
+
+  private sanitizeFinancialSummaryForWholesaler(
+    summary: InvoiceFinancialSummary,
+    user?: User | null,
+  ): Partial<InvoiceFinancialSummary> {
+    if (!this.isWholesalerUser(user)) return summary;
+    return {
+      TotalBilled: summary.TotalBilled,
+      CashCollected: summary.CashCollected,
+      OutstandingDue: summary.OutstandingDue,
+      CustomerCredit: summary.CustomerCredit,
+    };
   }
 
   private sanitizeDashboardForWholesaler(
@@ -110,7 +139,8 @@ export class InvoiceService {
 
     return {
       ThisMonthTotalInvoice: responseData.ThisMonthTotalInvoice,
-      TotalDueAmount: responseData.TotalDueAmount,
+      TotalOutstandingDue: responseData.TotalOutstandingDue,
+      TotalCustomerCredit: responseData.TotalCustomerCredit,
       RecentInvoiceData: (responseData.RecentInvoiceData || []).map(
         (invoice: Record<string, any>) =>
           this.sanitizeInvoiceForWholesaler(invoice, user),
@@ -148,9 +178,11 @@ export class InvoiceService {
           ? dto.PaymentAmount
           : prepared.totalSellAmount,
         PaymentAmount: dto.PaymentAmount,
-        ProfitMargin: isDuePaymentInvoice
-          ? dto.PaymentAmount
-          : dto.PaymentAmount - prepared.totalCostAmount,
+        ProductCostAmount: isDuePaymentInvoice ? 0 : prepared.totalCostAmount,
+        GrossProfit: isDuePaymentInvoice
+          ? 0
+          : prepared.totalSellAmount - prepared.totalCostAmount,
+        RealizedCashMargin: dto.PaymentAmount - prepared.totalCostAmount,
         WholeSalerId: dto.WholeSalerId || '',
         WholeSalerName: wholesalerInfo?.DisplayName ?? '',
         InvoiceType: dto.InvoiceType,
@@ -214,7 +246,9 @@ export class InvoiceService {
             ItemId: normalizedInvoice._id,
             InvoiceNumber: normalizedInvoice.InvoiceNumber,
             PaymentAmount: normalizedInvoice.PaymentAmount,
-            ProfitMargin: normalizedInvoice.ProfitMargin,
+            ProductCostAmount: normalizedInvoice.ProductCostAmount,
+            GrossProfit: normalizedInvoice.GrossProfit,
+            RealizedCashMargin: normalizedInvoice.RealizedCashMargin,
             TotalAmount: normalizedInvoice.TotalAmount,
             WholeSalerId: normalizedInvoice.WholeSalerId,
             InvoiceType:
@@ -230,6 +264,10 @@ export class InvoiceService {
       return await this.getInvoiceByIdResponse(responseCompanies, loggedInUser);
     }
     response.setData(responseCompanies, dataCount);
+    response.Summary = this.sanitizeFinancialSummaryForWholesaler(
+      await this.getFinancialSummary(mongoQuery),
+      loggedInUser,
+    );
     return response;
   }
 
@@ -339,9 +377,13 @@ export class InvoiceService {
               ? dto.PaymentAmount
               : prepared.totalSellAmount,
             PaymentAmount: dto.PaymentAmount,
-            ProfitMargin: isDuePaymentInvoice
-              ? dto.PaymentAmount
-              : dto.PaymentAmount - prepared.totalCostAmount,
+            ProductCostAmount: isDuePaymentInvoice
+              ? 0
+              : prepared.totalCostAmount,
+            GrossProfit: isDuePaymentInvoice
+              ? 0
+              : prepared.totalSellAmount - prepared.totalCostAmount,
+            RealizedCashMargin: dto.PaymentAmount - prepared.totalCostAmount,
             InvoiceType: dto.InvoiceType,
             WholeSalerId: dto.WholeSalerId || '',
             WholeSalerName: wholesalerInfo?.DisplayName ?? '',
@@ -360,7 +402,12 @@ export class InvoiceService {
   private normalizeInvoiceAmounts<
     T extends Pick<
       Invoice,
-      'InvoiceType' | 'PaymentAmount' | 'ProfitMargin' | 'TotalAmount'
+      | 'InvoiceType'
+      | 'PaymentAmount'
+      | 'ProductCostAmount'
+      | 'GrossProfit'
+      | 'RealizedCashMargin'
+      | 'TotalAmount'
     >,
   >(invoice: T): T {
     if (invoice.InvoiceType !== INVOICE_CONSTANT.DUE_PAYMENT) {
@@ -370,7 +417,9 @@ export class InvoiceService {
     return {
       ...invoice,
       TotalAmount: invoice.PaymentAmount,
-      ProfitMargin: invoice.PaymentAmount,
+      ProductCostAmount: 0,
+      GrossProfit: 0,
+      RealizedCashMargin: invoice.PaymentAmount,
     };
   }
 
@@ -507,6 +556,7 @@ export class InvoiceService {
         ProductId: eachSell.ProductId,
         ProductName: productInfo.ProductName,
         SellingPrice: eachSell.SellingPrice,
+        MakingPrice: productInfo.MakingPrice,
         Quantity: eachSell.Quantity,
         WholeSalerId: dto.WholeSalerId || '',
         WholeSalerName: wholesalerInfo?.DisplayName ?? '',
@@ -600,40 +650,50 @@ export class InvoiceService {
     const response = new QueryRespone();
     const invoiceFilter = this.getInvoiceAccessQuery(loggedInUser);
     const productSellFilter = this.getProductSellAccessQuery(loggedInUser);
-    const revenueGroupedByDate =
-      await this.getRevenueGroupedByDate(invoiceFilter);
-    const productSalesInfo = await this.getProductSalesInfo(productSellFilter);
-    const wholeSalersSalesInfo =
-      await this.getWholeSalersSalesInfo(invoiceFilter);
-    const totalRevenueOfThisMonth =
-      await this.getThisMonthRevenue(invoiceFilter);
     const start = startOfMonth(new Date());
     const end = startOfMonth(addMonths(start, 1));
-    const totalInvoices = await this.invoiceModel.countDocuments({
+    const monthFilter = {
       ...invoiceFilter,
       CreatedDate: { $gte: start.toISOString(), $lt: end.toISOString() },
-    });
-    const totalSell = await this.getThisMonthTotalSold(productSellFilter);
-    const totalDueAmount = await this.getTotalDueAmount(invoiceFilter);
-    const recentInvoiceDocs = await this.invoiceModel
-      .find(invoiceFilter)
-      .sort({ CreatedDate: -1 })
-      .limit(5);
+    };
+    const [
+      cashMarginData,
+      productSalesInfo,
+      cashCollectedByWholesaler,
+      monthlyFinancials,
+      lifetimeFinancials,
+      totalInvoices,
+      totalSell,
+      recentInvoiceDocs,
+    ] = await Promise.all([
+      this.getCashMarginGroupedByDate(invoiceFilter),
+      this.getProductSalesInfo(productSellFilter),
+      this.getWholeSalersCashCollected(invoiceFilter),
+      this.getFinancialSummary(monthFilter),
+      this.getFinancialSummary(invoiceFilter),
+      this.invoiceModel.countDocuments(monthFilter),
+      this.getThisMonthTotalSold(productSellFilter),
+      this.invoiceModel.find(invoiceFilter).sort({ CreatedDate: -1 }).limit(5),
+    ]);
     const recentInvoiceData = recentInvoiceDocs.map((invoice) =>
       this.normalizeInvoiceAmounts(invoice.toObject()),
     );
-    const consumerData = wholeSalersSalesInfo.find((x) => x.name == '');
+    const consumerData = cashCollectedByWholesaler.find((x) => x.name == '');
     if (consumerData) {
       consumerData.name = 'Consumer';
     }
     const responseData = {
-      SalesData: revenueGroupedByDate,
+      CashMarginData: cashMarginData,
       ProductSalesInfo: productSalesInfo,
-      WholesalerData: wholeSalersSalesInfo,
-      ThisMonthRevenue: totalRevenueOfThisMonth,
+      CashCollectedByWholesaler: cashCollectedByWholesaler,
+      ThisMonthCashCollected: monthlyFinancials.CashCollected,
+      ThisMonthGrossProfit: monthlyFinancials.GrossProfit,
+      ThisMonthRealizedCashMargin: monthlyFinancials.RealizedCashMargin,
       ThisMonthTotalInvoice: totalInvoices,
       ThisMonthTotalSell: totalSell,
-      TotalDueAmount: totalDueAmount,
+      TotalOutstandingDue: lifetimeFinancials.OutstandingDue,
+      TotalCustomerCredit: lifetimeFinancials.CustomerCredit,
+      TotalCostAtRisk: lifetimeFinancials.CostAtRisk,
       RecentInvoiceData: recentInvoiceData,
     };
     response.setData(
@@ -643,9 +703,11 @@ export class InvoiceService {
     return response;
   }
 
-  async getRevenueGroupedByDate(
+  async getCashMarginGroupedByDate(
     filter: Record<string, any> = {},
-  ): Promise<{ date: string; revenue: number }[]> {
+  ): Promise<
+    { date: string; cashCollected: number; realizedCashMargin: number }[]
+  > {
     const result = await this.invoiceModel.aggregate([
       {
         $match: filter,
@@ -658,26 +720,23 @@ export class InvoiceService {
               date: { $toDate: '$CreatedDate' },
             },
           },
-          revenue: {
-            $cond: [
-              { $eq: ['$InvoiceType', INVOICE_CONSTANT.DUE_PAYMENT] },
-              '$PaymentAmount',
-              '$ProfitMargin',
-            ],
-          },
+          cashCollected: '$PaymentAmount',
+          realizedCashMargin: '$RealizedCashMargin',
         },
       },
       {
         $group: {
           _id: '$date',
-          revenue: { $sum: '$revenue' },
+          cashCollected: { $sum: '$cashCollected' },
+          realizedCashMargin: { $sum: '$realizedCashMargin' },
         },
       },
       {
         $project: {
           _id: 0,
           date: '$_id',
-          revenue: 1,
+          cashCollected: 1,
+          realizedCashMargin: 1,
         },
       },
       {
@@ -714,7 +773,7 @@ export class InvoiceService {
     return result;
   }
 
-  async getWholeSalersSalesInfo(
+  async getWholeSalersCashCollected(
     filter: Record<string, any> = {},
   ): Promise<{ name: string; value: number }[]> {
     const result = await this.invoiceModel.aggregate([
@@ -740,54 +799,79 @@ export class InvoiceService {
     ]);
     return result;
   }
-  async getThisMonthRevenue(filter: Record<string, any> = {}): Promise<number> {
-    const now = new Date();
-
-    const start = startOfMonth(now);
-    const end = startOfMonth(addMonths(now, 1));
-
+  async getFinancialSummary(
+    filter: Record<string, any> = {},
+  ): Promise<InvoiceFinancialSummary> {
     const result = await this.invoiceModel.aggregate([
-      {
-        $addFields: {
-          CreatedDateObj: { $toDate: '$CreatedDate' }, // 👈 Convert string to date
-        },
-      },
-      {
-        $match: {
-          ...filter,
-          CreatedDateObj: {
-            $gte: start,
-            $lt: end,
-          },
-        },
-      },
-      {
-        $project: {
-          CreatedDateObj: 1,
-          revenue: {
-            $cond: [
-              { $eq: ['$InvoiceType', INVOICE_CONSTANT.DUE_PAYMENT] },
-              '$PaymentAmount',
-              '$ProfitMargin',
-            ],
-          },
-        },
-      },
+      { $match: filter },
       {
         $group: {
           _id: null,
-          totalRevenue: { $sum: '$revenue' },
+          TotalBilled: {
+            $sum: {
+              $cond: [
+                { $eq: ['$InvoiceType', INVOICE_CONSTANT.DUE_PAYMENT] },
+                0,
+                '$TotalAmount',
+              ],
+            },
+          },
+          ProductCostAmount: {
+            $sum: {
+              $cond: [
+                { $eq: ['$InvoiceType', INVOICE_CONSTANT.DUE_PAYMENT] },
+                0,
+                '$ProductCostAmount',
+              ],
+            },
+          },
+          CashCollected: { $sum: '$PaymentAmount' },
+          GrossProfit: {
+            $sum: {
+              $cond: [
+                { $eq: ['$InvoiceType', INVOICE_CONSTANT.DUE_PAYMENT] },
+                0,
+                '$GrossProfit',
+              ],
+            },
+          },
+          RealizedCashMargin: { $sum: '$RealizedCashMargin' },
         },
       },
       {
         $project: {
           _id: 0,
-          totalRevenue: 1,
+          TotalBilled: 1,
+          ProductCostAmount: 1,
+          CashCollected: 1,
+          GrossProfit: 1,
+          RealizedCashMargin: 1,
+          OutstandingDue: {
+            $max: [{ $subtract: ['$TotalBilled', '$CashCollected'] }, 0],
+          },
+          CustomerCredit: {
+            $max: [{ $subtract: ['$CashCollected', '$TotalBilled'] }, 0],
+          },
+          CostAtRisk: {
+            $max: [{ $subtract: ['$ProductCostAmount', '$CashCollected'] }, 0],
+          },
         },
       },
     ]);
-    return result.length > 0 ? result[0].totalRevenue : 0;
+    return (
+      result[0] ?? {
+        TotalBilled: 0,
+        ProductCostAmount: 0,
+        CashCollected: 0,
+        GrossProfit: 0,
+        RealizedCashMargin: 0,
+        OutstandingDue: 0,
+        CustomerCredit: 0,
+        CostAtRisk: 0,
+      }
+    );
   }
+
   async getThisMonthTotalSold(
     filter: Record<string, any> = {},
   ): Promise<number> {
@@ -828,35 +912,6 @@ export class InvoiceService {
   }
 
   async getTotalDueAmount(filter: Record<string, any> = {}): Promise<number> {
-    const result = await this.invoiceModel.aggregate([
-      {
-        $match: filter,
-      },
-      {
-        $project: {
-          dueAmount: {
-            $cond: [
-              { $eq: ['$InvoiceType', INVOICE_CONSTANT.DUE_PAYMENT] },
-              { $multiply: ['$PaymentAmount', -1] },
-              { $subtract: ['$TotalAmount', '$PaymentAmount'] },
-            ],
-          },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalDueAmount: { $sum: '$dueAmount' },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          totalDueAmount: 1,
-        },
-      },
-    ]);
-
-    return result.length > 0 ? result[0].totalDueAmount : 0;
+    return (await this.getFinancialSummary(filter)).OutstandingDue;
   }
 }

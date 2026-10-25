@@ -2,6 +2,7 @@ export class QueryRespone {
   IsSuccess: boolean;
   Data: any;
   TotalCount: number;
+  Summary?: any;
 
   public constructor() {
     this.IsSuccess = true;

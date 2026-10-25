@@ -20,8 +20,14 @@ export class Invoice extends RootSchema {
   @Prop({ required: true, min: 0 })
   PaymentAmount: number;
 
+  @Prop({ required: true, min: 0 })
+  ProductCostAmount: number;
+
   @Prop({ required: true })
-  ProfitMargin: number;
+  GrossProfit: number;
+
+  @Prop({ required: true })
+  RealizedCashMargin: number;
 
   @Prop({
     required: true,

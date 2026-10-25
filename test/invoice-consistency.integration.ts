@@ -107,18 +107,29 @@ describe('invoice consistency on an isolated local replica set', () => {
 
     expect((await products.findById('net-a'))?.Quantity).toBe(8);
     expect(await sells.countDocuments({ ProductId: 'net-a' })).toBe(1);
+    expect(await sells.findOne({ ProductId: 'net-a' })).toMatchObject({
+      MakingPrice: 100,
+      SellingPrice: 150,
+      Quantity: 2,
+    });
     const invoice = await invoices.findOne({ WholeSalerId: 'wholesaler-a' });
     expect(invoice).toMatchObject({
       TotalAmount: 300,
       PaymentAmount: 250,
-      ProfitMargin: 50,
+      ProductCostAmount: 200,
+      GrossProfit: 100,
+      RealizedCashMargin: 50,
     });
     const dashboard = await service.getDashboardStatsData(admin);
     expect(dashboard.Data).toMatchObject({
-      ThisMonthRevenue: 50,
+      ThisMonthCashCollected: 250,
+      ThisMonthGrossProfit: 100,
+      ThisMonthRealizedCashMargin: 50,
       ThisMonthTotalInvoice: 1,
       ThisMonthTotalSell: 2,
-      TotalDueAmount: 50,
+      TotalOutstandingDue: 50,
+      TotalCustomerCredit: 0,
+      TotalCostAtRisk: 0,
     });
   });
 
@@ -181,7 +192,9 @@ describe('invoice consistency on an isolated local replica set', () => {
     expect(await invoices.findById(invoice!._id)).toMatchObject({
       TotalAmount: 450,
       PaymentAmount: 400,
-      ProfitMargin: 100,
+      ProductCostAmount: 300,
+      GrossProfit: 150,
+      RealizedCashMargin: 100,
     });
 
     await expect(
@@ -217,10 +230,13 @@ describe('invoice consistency on an isolated local replica set', () => {
     expect(await sells.countDocuments({})).toBe(0);
     expect(await invoices.countDocuments({})).toBe(0);
     expect((await service.getDashboardStatsData(admin)).Data).toMatchObject({
-      ThisMonthRevenue: 0,
+      ThisMonthCashCollected: 0,
+      ThisMonthGrossProfit: 0,
+      ThisMonthRealizedCashMargin: 0,
       ThisMonthTotalInvoice: 0,
       ThisMonthTotalSell: 0,
-      TotalDueAmount: 0,
+      TotalOutstandingDue: 0,
+      TotalCostAtRisk: 0,
     });
   });
 
@@ -233,19 +249,32 @@ describe('invoice consistency on an isolated local replica set', () => {
     const payment = await invoices.findOne({ InvoiceType: 'DUE_PAYMENT' });
 
     expect((await products.findById('net-a'))?.Quantity).toBe(8);
-    expect(
-      (await service.getDashboardStatsData(admin)).Data.TotalDueAmount,
-    ).toBe(140);
+    expect(payment).toMatchObject({
+      ProductCostAmount: 0,
+      GrossProfit: 0,
+      RealizedCashMargin: 60,
+    });
+    expect((await service.getDashboardStatsData(admin)).Data).toMatchObject({
+      ThisMonthCashCollected: 160,
+      ThisMonthGrossProfit: 100,
+      ThisMonthRealizedCashMargin: -40,
+      TotalOutstandingDue: 140,
+      TotalCostAtRisk: 40,
+    });
     await service.updateInvoice(
       { ...duePayment(80), ItemId: payment!._id },
       admin,
     );
-    expect(
-      (await service.getDashboardStatsData(admin)).Data.TotalDueAmount,
-    ).toBe(120);
+    expect((await service.getDashboardStatsData(admin)).Data).toMatchObject({
+      ThisMonthCashCollected: 180,
+      ThisMonthGrossProfit: 100,
+      ThisMonthRealizedCashMargin: -20,
+      TotalOutstandingDue: 120,
+      TotalCostAtRisk: 20,
+    });
     await service.deleteInvoiceById(payment!._id, admin);
     expect(
-      (await service.getDashboardStatsData(admin)).Data.TotalDueAmount,
+      (await service.getDashboardStatsData(admin)).Data.TotalOutstandingDue,
     ).toBe(200);
     expect((await products.findById('net-a'))?.Quantity).toBe(8);
     expect(await sells.countDocuments({})).toBe(1);
@@ -303,10 +332,12 @@ describe('invoice consistency on an isolated local replica set', () => {
 
     const dashboard = await service.getDashboardStatsData(admin);
     expect(dashboard.Data).toMatchObject({
-      ThisMonthRevenue: 0,
+      ThisMonthCashCollected: 0,
+      ThisMonthGrossProfit: 0,
+      ThisMonthRealizedCashMargin: 0,
       ThisMonthTotalInvoice: 0,
       ThisMonthTotalSell: 0,
-      TotalDueAmount: 50,
+      TotalOutstandingDue: 50,
     });
   });
 
@@ -378,7 +409,15 @@ describe('invoice consistency on an isolated local replica set', () => {
     );
     expect(listA.TotalCount).toBe(1);
     expect(listA.Data[0].WholeSalerId).toBe('wholesaler-a');
-    expect(listA.Data[0]).not.toHaveProperty('ProfitMargin');
+    expect(listA.Data[0]).not.toHaveProperty('ProductCostAmount');
+    expect(listA.Data[0]).not.toHaveProperty('GrossProfit');
+    expect(listA.Data[0]).not.toHaveProperty('RealizedCashMargin');
+    expect(listA.Summary).toEqual({
+      TotalBilled: 300,
+      CashCollected: 250,
+      OutstandingDue: 50,
+      CustomerCredit: 0,
+    });
     await expect(
       service.getInvoiceList({ size: '10' }, { ItemId: invoiceB!._id }, ownerA),
     ).rejects.toMatchObject({ status: 400 });
@@ -387,9 +426,12 @@ describe('invoice consistency on an isolated local replica set', () => {
     expect(dashboardA.Data.ThisMonthTotalInvoice).toBe(1);
     expect(dashboardA.Data.RecentInvoiceData).toHaveLength(1);
     expect(dashboardA.Data.RecentInvoiceData[0]).not.toHaveProperty(
-      'ProfitMargin',
+      'GrossProfit',
     );
-    expect(dashboardA.Data).not.toHaveProperty('ThisMonthRevenue');
+    expect(dashboardA.Data.RecentInvoiceData[0]).not.toHaveProperty(
+      'RealizedCashMargin',
+    );
+    expect(dashboardA.Data).not.toHaveProperty('ThisMonthGrossProfit');
 
     const adminList = await service.getInvoiceList(
       { size: '10' },
@@ -397,7 +439,18 @@ describe('invoice consistency on an isolated local replica set', () => {
       { ...ownerA, Roles: ['wholesaler', 'admin'] } as any,
     );
     expect(adminList.TotalCount).toBe(2);
-    expect(adminList.Data.every((item) => 'ProfitMargin' in item)).toBe(true);
+    expect(adminList.Data.every((item) => 'GrossProfit' in item)).toBe(true);
+    expect(adminList.Data.every((item) => 'RealizedCashMargin' in item)).toBe(
+      true,
+    );
+    expect(adminList.Summary).toMatchObject({
+      TotalBilled: 450,
+      ProductCostAmount: 300,
+      CashCollected: 400,
+      GrossProfit: 150,
+      RealizedCashMargin: 100,
+      OutstandingDue: 50,
+    });
   });
 
   it('denies direct service access for every unsupported role', async () => {

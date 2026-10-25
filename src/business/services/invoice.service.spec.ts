@@ -60,11 +60,14 @@ describe('InvoiceService access, validation and reporting', () => {
           _id: 'invoice-1',
           ...due,
           TotalAmount: 100,
-          ProfitMargin: 100,
+          ProductCostAmount: 0,
+          GrossProfit: 0,
+          RealizedCashMargin: 100,
         }),
       },
     ]);
     invoices.countDocuments.mockResolvedValue(1);
+    invoices.aggregate.mockResolvedValue([]);
     sells.find.mockResolvedValue([]);
     users.findOne.mockReturnValue(
       sessionResult({
@@ -159,7 +162,9 @@ describe('InvoiceService access, validation and reporting', () => {
     expect(invoices.countDocuments).toHaveBeenCalledWith({
       WholeSalerId: 'owner',
     });
-    expect(result.Data[0]).not.toHaveProperty('ProfitMargin');
+    expect(result.Data[0]).not.toHaveProperty('ProductCostAmount');
+    expect(result.Data[0]).not.toHaveProperty('GrossProfit');
+    expect(result.Data[0]).not.toHaveProperty('RealizedCashMargin');
   });
 
   it('scopes detail sale rows to the owning wholesaler', async () => {
@@ -181,7 +186,7 @@ describe('InvoiceService access, validation and reporting', () => {
       { _id: 'owner', Roles: ['wholesaler', 'admin'] } as any,
     );
     expect(invoices.find).toHaveBeenCalledWith({});
-    expect(result.Data[0].ProfitMargin).toBe(100);
+    expect(result.Data[0].RealizedCashMargin).toBe(100);
   });
 
   it('combines admin invoice and wholesaler filters', async () => {
@@ -235,7 +240,9 @@ describe('InvoiceService access, validation and reporting', () => {
         expect.objectContaining({
           TotalAmount: 100,
           PaymentAmount: 100,
-          ProfitMargin: 100,
+          ProductCostAmount: 0,
+          GrossProfit: 0,
+          RealizedCashMargin: 100,
           InvoiceType: 'DUE_PAYMENT',
           WholeSalerId: 'owner',
         }),
@@ -264,7 +271,15 @@ describe('InvoiceService access, validation and reporting', () => {
       invoices.aggregate.mockResolvedValue([]);
       sells.aggregate.mockResolvedValue([]);
       invoiceQuery.limit.mockResolvedValue([
-        { toObject: () => ({ ...due, TotalAmount: 0, ProfitMargin: 0 }) },
+        {
+          toObject: () => ({
+            ...due,
+            TotalAmount: 0,
+            ProductCostAmount: 0,
+            GrossProfit: 0,
+            RealizedCashMargin: 0,
+          }),
+        },
       ]);
       const result = await service.getDashboardStatsData(
         asWholesaler ? wholesaler : admin,
@@ -292,24 +307,42 @@ describe('InvoiceService access, validation and reporting', () => {
         expect(Object.keys(result.Data).sort()).toEqual([
           'RecentInvoiceData',
           'ThisMonthTotalInvoice',
-          'TotalDueAmount',
+          'TotalCustomerCredit',
+          'TotalOutstandingDue',
         ]);
         expect(result.Data.RecentInvoiceData[0]).not.toHaveProperty(
-          'ProfitMargin',
+          'GrossProfit',
+        );
+        expect(result.Data.RecentInvoiceData[0]).not.toHaveProperty(
+          'RealizedCashMargin',
         );
       } else {
-        expect(result.Data).toHaveProperty('ThisMonthRevenue', 0);
-        expect(result.Data.RecentInvoiceData[0].ProfitMargin).toBe(100);
+        expect(result.Data).toHaveProperty('ThisMonthGrossProfit', 0);
+        expect(result.Data).toHaveProperty('ThisMonthRealizedCashMargin', 0);
+        expect(result.Data.RecentInvoiceData[0].RealizedCashMargin).toBe(100);
       }
     },
   );
 
-  it('reads aggregated revenue, sales and due totals', async () => {
-    invoices.aggregate
-      .mockResolvedValueOnce([{ totalRevenue: 300 }])
-      .mockResolvedValueOnce([{ totalDueAmount: 80 }]);
+  it('reads financial, sales and due summaries', async () => {
+    invoices.aggregate.mockResolvedValue([
+      {
+        TotalBilled: 500,
+        ProductCostAmount: 350,
+        CashCollected: 420,
+        GrossProfit: 150,
+        RealizedCashMargin: 70,
+        OutstandingDue: 80,
+        CustomerCredit: 0,
+        CostAtRisk: 0,
+      },
+    ]);
     sells.aggregate.mockResolvedValue([{ totalSell: 5 }]);
-    expect(await service.getThisMonthRevenue()).toBe(300);
+    expect(await service.getFinancialSummary()).toMatchObject({
+      GrossProfit: 150,
+      RealizedCashMargin: 70,
+      OutstandingDue: 80,
+    });
     expect(await service.getTotalDueAmount()).toBe(80);
     expect(await service.getThisMonthTotalSold()).toBe(5);
   });
