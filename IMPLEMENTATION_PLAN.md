@@ -129,9 +129,11 @@ Final owner decision (2026-10-24): no payment-method selection or online payment
 
 Implemented 2026-10-24: mandatory normalized Bangladesh mobile number, fixed manual/unpaid order fields and immediate-action queue flag. Existing ListOrders supports NeedsAction; successful admin transitions clear the flag transactionally. Backend verification: 431 tests, 158 HTTP contract tests, 9 isolated Mongo integration tests and typecheck passed. No new endpoint/permission mappings or merchant configuration required. See docs/MANUAL_ORDER_WORKFLOW.md for the final decision and frontend handoff.
 
-### BE-106 - P1 - Invoice consistency and access tests (TODO)
+### BE-106 - P1 - Invoice consistency and access tests (COMPLETE)
 
 Test create/edit/delete effects on stock, dues and dashboards; prevent partial multi-document updates. Verify wholesaler A cannot read B's list/detail/dashboard or private profit/cost fields. Review all role enforcement, not only UI navigation.
+
+Completed 2026-10-25: create, edit and delete now update inventory, product-sale rows and invoices in one MongoDB transaction with conditional stock deductions. Edit/delete restore prior stock; due payments cannot contain products and reduce outstanding due without stock writes. Strict numeric, owner-role, pagination and admin/read-role validation now applies in both controller and service. Invoice numbers and common owner/detail lookup paths are indexed. Wholesaler list/detail/dashboard queries are owner-scoped and omit profit/private reporting; admin+wholesaler users retain admin access. Verification passes 449 unit/contract tests, 168 HTTP tests, 21 isolated MongoDB integration tests and typecheck. Existing routes mean permission seed tables are unchanged. See docs/INVOICE_CONSISTENCY.md.
 
 ### BE-107 - P1 - Due-payment reporting policy (DECISION)
 

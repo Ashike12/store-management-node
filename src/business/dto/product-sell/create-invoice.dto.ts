@@ -1,11 +1,34 @@
-import { IsIn, IsNotEmpty } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsIn,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { INVOICE_CONSTANT } from '../../../shared/constant/invoice.constant';
+import { ORDER_LIMITS } from '../../../shared/constant/order-validation.constant';
 export class CreateInvoiceDto {
+  @IsArray()
+  @ArrayMaxSize(ORDER_LIMITS.items)
+  @ValidateNested({ each: true })
+  @Type(() => ProductSellDto)
   readonly ProductSellInfo: ProductSellDto[] = [];
 
-  @IsNotEmpty()
+  @IsNumber({ allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 })
+  @Min(0)
+  @Max(ORDER_LIMITS.items * ORDER_LIMITS.quantity * ORDER_LIMITS.unitPrice)
   readonly PaymentAmount: number;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
   readonly WholeSalerId: string;
 
   @IsNotEmpty()
@@ -19,11 +42,17 @@ export class CreateInvoiceDto {
 
 export class ProductSellDto {
   @IsNotEmpty()
+  @IsString()
+  @MaxLength(100)
   readonly ProductId: string;
 
-  @IsNotEmpty()
+  @IsNumber({ allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 })
+  @Min(0)
+  @Max(ORDER_LIMITS.unitPrice)
   readonly SellingPrice: number;
 
-  @IsNotEmpty()
+  @IsNumber({ allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 })
+  @Min(0.000001)
+  @Max(ORDER_LIMITS.quantity)
   readonly Quantity: number;
 }
