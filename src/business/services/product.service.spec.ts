@@ -181,17 +181,101 @@ describe('ProductService with isolated persistence', () => {
     expect(model.find).toHaveBeenCalledWith({});
   });
   it('keeps wholesale and making prices out of the public response', async () => {
+    query.skip.mockResolvedValueOnce([
+      {
+        ...product,
+        QrVerificationEnabled: true,
+        QrVerificationToken: 'private-opaque-token',
+      },
+    ]);
     const response = JSON.stringify(
       await service.getClientProduct({ size: '10' }, {} as any),
     );
     expect(response).not.toContain('WholeSalerPrice');
     expect(response).not.toContain('MakingPrice');
+    expect(response).not.toContain('private-opaque-token');
+    expect(response).not.toContain('QrVerification');
     expect(response).toContain('EndUserDiscountedPrice');
     const admin = JSON.stringify(
       await service.getProduct({ size: '10' }, {} as any),
     );
     expect(admin).toContain('WholeSalerPrice');
     expect(admin).toContain('MakingPrice');
+  });
+  it('enables, disables and rotates an opaque product QR token', async () => {
+    const originalClientUrl = process.env.PUBLIC_CLIENT_URL;
+    process.env.PUBLIC_CLIENT_URL = 'https://shop.example.com/';
+    model.findOne.mockResolvedValue(product);
+
+    const enabled = await service.configureQrVerification({
+      ItemId: 'product-1',
+      Action: 'enable',
+    });
+    const firstUpdate = model.findByIdAndUpdate.mock.calls[0][1];
+    expect(firstUpdate.QrVerificationEnabled).toBe(true);
+    expect(firstUpdate.QrVerificationToken).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    expect(enabled.Data.QrVerificationUrl).toBe(
+      `https://shop.example.com/verify-product/${firstUpdate.QrVerificationToken}`,
+    );
+
+    model.findOne.mockResolvedValue({
+      ...product,
+      QrVerificationEnabled: true,
+      QrVerificationToken: firstUpdate.QrVerificationToken,
+    });
+    const disabled = await service.configureQrVerification({
+      ItemId: 'product-1',
+      Action: 'disable',
+    });
+    expect(model.findByIdAndUpdate.mock.calls[1][1]).toEqual({
+      QrVerificationEnabled: false,
+      QrVerificationToken: firstUpdate.QrVerificationToken,
+    });
+    expect(disabled.Data.QrVerificationUrl).toBeNull();
+
+    await service.configureQrVerification({
+      ItemId: 'product-1',
+      Action: 'rotate',
+    });
+    expect(model.findByIdAndUpdate.mock.calls[2][1].QrVerificationToken).not.toBe(
+      firstUpdate.QrVerificationToken,
+    );
+
+    if (originalClientUrl === undefined) delete process.env.PUBLIC_CLIENT_URL;
+    else process.env.PUBLIC_CLIENT_URL = originalClientUrl;
+  });
+  it('returns only public product identity for an enabled QR code', async () => {
+    model.findOne.mockResolvedValue({
+      ...product,
+      QrVerificationEnabled: true,
+      QrVerificationToken: 'opaque-token',
+    });
+    const response = await service.verifyProductQr('opaque-token');
+    expect(model.findOne).toHaveBeenCalledWith({
+      QrVerificationToken: 'opaque-token',
+      QrVerificationEnabled: true,
+    });
+    expect(response.Data).toEqual({
+      ProductName: 'Net',
+      ImageUrl: 'https://example.com/net.jpg',
+    });
+    expect(JSON.stringify(response)).not.toContain('Price');
+    expect(JSON.stringify(response)).not.toContain('Serial');
+  });
+  it('does not verify disabled, stale or unknown QR codes', async () => {
+    model.findOne.mockResolvedValue(null);
+    await expect(service.verifyProductQr('unknown-token')).rejects.toThrow(
+      'Product verification code not found',
+    );
+  });
+  it('rejects QR management for a missing product', async () => {
+    model.findOne.mockResolvedValue(null);
+    await expect(
+      service.configureQrVerification({
+        ItemId: 'missing',
+        Action: 'enable',
+      }),
+    ).rejects.toThrow('Product not found');
   });
   it('increments production atomically and creates an immutable batch', async () => {
     await service.addProduction(

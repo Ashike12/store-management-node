@@ -149,7 +149,7 @@ Audit dependencies and Node compatibility before choosing upgrade targets; NestJ
 
 ### BE-109 - Optional product QR verification
 
-- Status: TODO - documentation only; implementation deferred by user.
+- Status: COMPLETE - implemented and tested 2026-10-26.
 - Requested: 2026-10-23. Priority: to be assigned.
 - Requirement: QR verification is available only for specifically enabled products, not automatically for the entire catalog. Scanning a code on a physical product identifies the linked product and displays its name and image.
 - Backend scope: store the opt-in setting and code-to-product association; provide an authorized management operation and public verification lookup. The lookup returns only public product information, never cost, wholesale prices, customer or invoice data.
@@ -157,8 +157,8 @@ Audit dependencies and Node compatibility before choosing upgrade targets; NestJ
 - Acceptance: a valid enabled code resolves to the correct product name/image; disabled, invalid or removed codes do not return a successful verification result; unauthorized users cannot enable or assign codes.
 - Source areas: src/shared/schemas/product.schema.ts, src/business/dto/product/, src/business/services/product.service.ts, src/business/business.controller.ts; dedicated QR storage/service if individual-item codes are chosen.
 - Dependencies: ADMIN-108 manages selected products and labels; CLIENT-110 displays scan results. Configure the public client URL for QR destinations without embedding secrets.
-- Decision before implementation: one shared code per catalog product versus unique codes per physical item/batch. User has requested product identification, not yet item-level authenticity or ownership verification. A copied shared QR code cannot prove a physical item is genuine.
-- Verification evidence: not implemented or tested.
+- Decision: one opaque shared code per opted-in catalog product. It identifies the catalog product but does not claim item authenticity, purchase or ownership and never encodes an inventory serial.
+- Verification evidence: admin-only enable/disable/rotate, public rate-limited lookup, unique token index, replay-safe permission seed and public response-projection tests. See `docs/PRODUCT_QR_VERIFICATION.md`.
 
 ### BE-110 - Inventory batches and globally unique item serials
 

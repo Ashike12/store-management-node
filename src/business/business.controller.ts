@@ -45,6 +45,10 @@ import {
   ListProductBatchesDto,
 } from './dto/product/inventory.dto';
 import { InventoryService } from './services/inventory.service';
+import {
+  ConfigureProductQrDto,
+  VerifyProductQrDto,
+} from './dto/product/product-qr.dto';
 
 @Controller('business')
 export class BusinessController {
@@ -135,6 +139,26 @@ export class BusinessController {
     @Body() dto: GetProductDto,
   ): Promise<QueryRespone> {
     return this.productService.getClientProduct(query, dto);
+  }
+
+  @Post('VerifyProductQr')
+  @HttpCode(200)
+  @UseGuards(RateLimitGuard(60, 30))
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
+  VerifyProductQr(@Body() dto: VerifyProductQrDto): Promise<CommandResponse> {
+    return this.productService.verifyProductQr(dto.Token);
+  }
+
+  @Post('ConfigureProductQr')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
+  ConfigureProductQr(
+    @Body() dto: ConfigureProductQrDto,
+    @Req() req: Request,
+  ): Promise<CommandResponse> {
+    this.ensureAdmin(req['user'] as User);
+    return this.productService.configureQrVerification(dto);
   }
 
   @Post('QuoteBuilder')
