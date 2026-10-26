@@ -31,8 +31,10 @@ import { AiSuggestionService } from './business/services/ai-suggestion.service';
 import { StorageController } from './storage/storage.controller';
 import { StorageService } from './storage/storage.service';
 import { RedisHelperService } from './services/redis-helper.service';
+import { InventoryService } from './business/services/inventory.service';
 
 const product = {
+  RequestId: 'product-create-request-1',
   ProductName: 'Test net',
   Description: 'Test description',
   Category: 'MosquitoNet',
@@ -378,8 +380,32 @@ const cases: Case[] = [
     path: '/business/AddProduction',
     service: ProductService,
     call: 'addProduction',
-    body: { ProductionInfo: [{ ProductId: 'test-id', Quantity: 10 }] },
-    invalid: {},
+    body: {
+      RequestId: 'production-request-1',
+      ProductionInfo: [{ ProductId: 'test-id', Quantity: 10 }],
+    },
+    invalid: {
+      RequestId: 'production-request-invalid',
+      ProductionInfo: [{ ProductId: 'test-id', Quantity: 0 }],
+    },
+    restricted: true,
+  },
+  {
+    method: 'post',
+    path: '/business/ListProductBatches',
+    service: InventoryService,
+    call: 'listBatches',
+    body: { ProductId: 'test-id', Page: 1, Size: 10 },
+    invalid: { ProductId: '', Page: 0, Size: 101 },
+    restricted: true,
+  },
+  {
+    method: 'post',
+    path: '/business/ListBatchItems',
+    service: InventoryService,
+    call: 'listItems',
+    body: { BatchId: 'batch-id', Page: 1, Size: 25 },
+    invalid: { BatchId: '', Page: 0, Size: 101 },
     restricted: true,
   },
   {

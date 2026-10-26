@@ -5,8 +5,15 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsInt,
+  Min,
+  Max,
 } from 'class-validator';
 export class CreateProductDto {
+  @IsString()
+  @IsNotEmpty()
+  readonly RequestId: string;
+
   @IsString()
   @IsNotEmpty()
   readonly ProductName: string;
@@ -55,7 +62,9 @@ export class CreateProductDto {
   @IsNotEmpty()
   readonly EndUserDiscountedPrice: number;
 
-  @IsNumber()
+  @IsInt()
+  @Min(0)
+  @Max(10000)
   @IsNotEmpty()
   readonly Quantity: number;
 }

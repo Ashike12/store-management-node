@@ -31,10 +31,17 @@ Coverage output is ignored by Git: `coverage/lcov-report/index.html`, `coverage/
 | App (1) | GET `/` |
 | Auth (5) | POST `/auth/signup`, `/auth/token`, `/auth/refresh`, `/auth/setPassword`, `/auth/getloginlog` |
 | User (9) | GET `/user/get`, `/user/me`, `/user/getById/:id`; POST `/user/getByEmail`, `/user/createCustomer`, `/user/update`, `/user/update-profile`, `/user/change-password`, `/user/delete` |
-| Business (17) | POST `/business/ListOrders`, `/business/GetOrder`, `/business/TransitionOrder`, `/business/QuoteBuilder`, `/business/GetProducts`, `/business/GetClientProducts`, `/business/CreateClientOrder`, `/business/CreateProduct`, `/business/UpdateProduct`, `/business/DeleteProduct`, `/business/CreateInvoice`, `/business/UpdateInvoice`, `/business/GetInvoice`, `/business/DeleteInvoice`, `/business/GetDashboardData`, `/business/AddProduction`, `/business/GenerateAiSuggestion` |
+| Business (19) | POST `/business/ListOrders`, `/business/GetOrder`, `/business/TransitionOrder`, `/business/QuoteBuilder`, `/business/GetProducts`, `/business/GetClientProducts`, `/business/CreateClientOrder`, `/business/CreateProduct`, `/business/UpdateProduct`, `/business/DeleteProduct`, `/business/CreateInvoice`, `/business/UpdateInvoice`, `/business/GetInvoice`, `/business/DeleteInvoice`, `/business/GetDashboardData`, `/business/AddProduction`, `/business/ListProductBatches`, `/business/ListBatchItems`, `/business/GenerateAiSuggestion` |
 | Storage (5) | POST `/storage/uploadFile`; GET `/storage/getFiles`, `/storage/getFilesByUser/:userId`, `/storage/getFile/:fileId`, `/storage/deleteFile/:fileId` |
 
 ## Focused service coverage
+
+### BE-110 inventory batches
+
+- `src/business/services/product.service.spec.ts` covers idempotent creation/intake contracts, increment semantics, direct-stock-edit rejection and inventory-history deletion protection.
+- `src/inventory-permissions.spec.ts` replays the admin-only endpoint seed and asserts global uniqueness indexes.
+- `test/inventory-batches.integration.ts` uses an isolated replica set for transactional creation, concurrent replay, global serial uniqueness, rollback and response privacy.
+- Verification on 2026-10-26: 461 tests across 20 unit/contract suites, 26 tests across 3 integration suites and TypeScript typecheck passed. The configured database permission/index seed was also applied successfully.
 
 - Product: create/update/delete, category validation, duplicate rejection, combined search/price/category filters, `size`/`page` pagination, public price privacy and production quantity replacement behavior.
 - Invoice: due-payment amounts, required wholesaler/product validation, own-invoice scoping, product sale stock changes, edit restoration, and dashboard query scoping/profit privacy. Aggregate results are mocked; these tests do not evaluate MongoDB pipelines.
