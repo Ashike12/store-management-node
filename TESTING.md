@@ -137,3 +137,12 @@ Final BE-103/104 run: 412 unit/contract tests (19 suites), 150 HTTP matrix tests
 - Wholesaler list, detail and dashboard responses omit private cost and margin fields.
 - Verification: 449 tests across 19 unit/contract suites, 168 HTTP tests, 21 isolated MongoDB integration tests, and TypeScript typecheck passed.
 - Reporting terminology for recovered due remains BE-107. No new endpoint or permission seed was introduced. See docs/INVOICE_CONSISTENCY.md.
+
+## BE-109 product QR verification (2026-10-26)
+
+- Product-level QR verification is opt-in and disabled for existing products by default. Admins can enable, disable or rotate a cryptographically random opaque token.
+- The public rate-limited lookup returns only the product name and first public image. Tests assert that prices, QR configuration and inventory serials are absent.
+- DTO and HTTP tests cover malformed tokens/actions, anonymous verification, admin-only configuration, wholesaler denial, errors and rate limiting.
+- The replay-safe seed writes both endpoints to `FeatureEndpointMap` and `FeatureRoleMap`, creates the unique sparse token index, and was applied successfully to the configured database.
+- Final verification: 475 tests across 21 unit/contract suites, 26 isolated MongoDB integration tests, and TypeScript typecheck passed. Admin 53 tests and client 56 tests passed with their TypeScript checks. No builds were run.
+- Deployment/configuration contract: [PRODUCT_QR_VERIFICATION.md](docs/PRODUCT_QR_VERIFICATION.md).

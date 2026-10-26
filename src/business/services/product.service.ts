@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import * as mongoose from 'mongoose';
 import { UserRoles } from '../../shared/constant/roles.constant';
@@ -26,7 +27,8 @@ import { GetInvoiceDto } from '../dto/product-sell/get-invoice.dto';
 import { AddProductionDto } from '../dto/product/add-production.dto';
 import { PRODUCT_CATEGORY_SUBCATEGORY_MAP } from '../../shared/constant/product.constant';
 import { InventoryService } from './inventory.service';
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
+import { ConfigureProductQrDto } from '../dto/product/product-qr.dto';
 
 @Injectable()
 export class ProductService {
@@ -269,6 +271,58 @@ export class ProductService {
     return response;
   }
 
+  async configureQrVerification(
+    dto: ConfigureProductQrDto,
+  ): Promise<CommandResponse> {
+    const product = await this.productModel.findOne({ _id: dto.ItemId });
+    if (!product) {
+      throw new BadRequestException('Product not found');
+    }
+
+    const shouldEnable = dto.Action !== 'disable';
+    let token = (product as any).QrVerificationToken as string | undefined;
+    if (dto.Action === 'rotate' || (shouldEnable && !token)) {
+      token = randomBytes(24).toString('base64url');
+    }
+
+    const updates: Record<string, unknown> = {
+      QrVerificationEnabled: shouldEnable,
+    };
+    if (token) updates.QrVerificationToken = token;
+
+    await this.productModel.findByIdAndUpdate(dto.ItemId, updates, {
+      new: true,
+      runValidators: true,
+    });
+
+    const response = new CommandResponse();
+    response.setSuccess({
+      ItemId: dto.ItemId,
+      QrVerificationEnabled: shouldEnable,
+      QrVerificationUrl:
+        shouldEnable && token ? this.buildQrVerificationUrl(token) : null,
+    });
+    return response;
+  }
+
+  async verifyProductQr(token: string): Promise<CommandResponse> {
+    const product = await this.productModel.findOne({
+      QrVerificationToken: token,
+      QrVerificationEnabled: true,
+    });
+    if (!product) {
+      throw new NotFoundException('Product verification code not found');
+    }
+
+    const imageLinks = this.getImageLinks(product);
+    const response = new CommandResponse();
+    response.setSuccess({
+      ProductName: product.ProductName,
+      ImageUrl: imageLinks[0] ?? null,
+    });
+    return response;
+  }
+
   private async queryProducts(
     query: Query,
     dto: GetProductDto,
@@ -321,12 +375,8 @@ export class ProductService {
   }
 
   private mapAdminProductResponse(x: Product): any {
-    const imageLinks =
-      x.ImageLinks && x.ImageLinks.length > 0
-        ? x.ImageLinks
-        : (x as any).ImageLink && typeof (x as any).ImageLink === 'string'
-          ? [(x as any).ImageLink]
-          : [];
+    const imageLinks = this.getImageLinks(x);
+    const qrToken = (x as any).QrVerificationToken as string | undefined;
     return {
       ItemId: x._id,
       ProductName: x.ProductName,
@@ -344,17 +394,17 @@ export class ProductService {
       EndUserDiscountedPrice:
         (x as any).EndUserDiscountedPrice ?? (x as any).SellingPrice ?? 0,
       Quantity: x.Quantity,
+      QrVerificationEnabled: Boolean((x as any).QrVerificationEnabled),
+      QrVerificationUrl:
+        (x as any).QrVerificationEnabled && qrToken
+          ? this.buildQrVerificationUrl(qrToken)
+          : null,
       CreatedDate: x.CreatedDate,
     };
   }
 
   private mapClientProductResponse(x: Product): any {
-    const imageLinks =
-      x.ImageLinks && x.ImageLinks.length > 0
-        ? x.ImageLinks
-        : (x as any).ImageLink && typeof (x as any).ImageLink === 'string'
-          ? [(x as any).ImageLink]
-          : [];
+    const imageLinks = this.getImageLinks(x);
     return {
       ItemId: x._id,
       ProductName: x.ProductName,
@@ -371,6 +421,17 @@ export class ProductService {
       Quantity: x.Quantity,
       CreatedDate: x.CreatedDate,
     };
+  }
+
+  private getImageLinks(product: Product): string[] {
+    if (product.ImageLinks?.length) return product.ImageLinks;
+    const legacyImage = (product as any).ImageLink;
+    return typeof legacyImage === 'string' && legacyImage ? [legacyImage] : [];
+  }
+
+  private buildQrVerificationUrl(token: string): string | null {
+    const clientUrl = process.env.PUBLIC_CLIENT_URL?.trim().replace(/\/$/, '');
+    return clientUrl ? `${clientUrl}/verify-product/${token}` : null;
   }
 
   async addProduction(

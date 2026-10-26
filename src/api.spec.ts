@@ -285,6 +285,25 @@ const cases: Case[] = [
   },
   {
     method: 'post',
+    path: '/business/VerifyProductQr',
+    service: ProductService,
+    call: 'verifyProductQr',
+    body: { Token: 'valid_QR-token' },
+    args: ['valid_QR-token'],
+    public: true,
+    invalid: { Token: 'invalid token!' },
+  },
+  {
+    method: 'post',
+    path: '/business/ConfigureProductQr',
+    service: ProductService,
+    call: 'configureQrVerification',
+    body: { ItemId: 'test-id', Action: 'enable' },
+    invalid: { ItemId: 'test-id', Action: 'invalid' },
+    restricted: true,
+  },
+  {
+    method: 'post',
     path: '/business/QuoteBuilder',
     service: ClientOrderService,
     call: 'quoteBuilder',
@@ -671,10 +690,15 @@ describe('API HTTP contracts (services mocked; no live infrastructure)', () => {
       .expect(400);
     expect(mocks.get(AuthService).login).not.toHaveBeenCalled();
   });
-  it.each(['GetClientProducts', 'CreateClientOrder', 'QuoteBuilder'])(
+  it.each([
+    'GetClientProducts',
+    'CreateClientOrder',
+    'QuoteBuilder',
+    'VerifyProductQr',
+  ])(
     'rate-limits %s',
     async (route) => {
-      redis.incrementWithExpiryInSecond.mockResolvedValue(11);
+      redis.incrementWithExpiryInSecond.mockResolvedValue(31);
       const c = cases.find((c) => c.path === `/business/${route}`);
       await send(c, c.body, '').expect(429);
       expect(mocks.get(c.service)[c.call]).not.toHaveBeenCalled();

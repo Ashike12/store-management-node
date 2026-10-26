@@ -49,6 +49,12 @@ export class Product extends RootSchema {
 
   @Prop()
   Quantity: number;
+
+  @Prop({ default: false })
+  QrVerificationEnabled: boolean;
+
+  @Prop()
+  QrVerificationToken?: string;
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);
@@ -58,5 +64,13 @@ ProductSchema.index(
   {
     unique: true,
     partialFilterExpression: { CreationRequestId: { $type: 'string' } },
+  },
+);
+
+ProductSchema.index(
+  { QrVerificationToken: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { QrVerificationToken: { $type: 'string' } },
   },
 );
