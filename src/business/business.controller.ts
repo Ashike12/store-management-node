@@ -40,6 +40,11 @@ import { GenerateAiSuggestionDto } from './dto/ai-suggestion/generate-ai-suggest
 import { AiSuggestionService } from './services/ai-suggestion.service';
 
 import { QuoteBuilderDto } from './dto/client-order/quote-builder.dto';
+import {
+  ListBatchItemsDto,
+  ListProductBatchesDto,
+} from './dto/product/inventory.dto';
+import { InventoryService } from './services/inventory.service';
 
 @Controller('business')
 export class BusinessController {
@@ -49,6 +54,7 @@ export class BusinessController {
     private invoiceService: InvoiceService,
     private clientOrderService: ClientOrderService,
     private aiSuggestionService: AiSuggestionService,
+    private inventoryService: InventoryService,
   ) {}
 
   private ensureWholesalerReadOnly(user?: User) {
@@ -153,12 +159,20 @@ export class BusinessController {
   @Post('CreateProduct')
   @HttpCode(200)
   @UseGuards(AuthGuard())
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
   CreateProduct(
     @Body() dto: CreateProductDto,
     @Req() req: Request,
   ): Promise<CommandResponse> {
-    this.ensureWholesalerReadOnly(req['user'] as User);
-    return this.productService.createProduct(dto);
+    const user = req['user'] as User;
+    this.ensureAdmin(user);
+    return this.productService.createProduct(dto, user);
   }
 
   @Post('UpdateProduct')
@@ -168,7 +182,7 @@ export class BusinessController {
     @Body() dto: UpdateProductDto,
     @Req() req: Request,
   ): Promise<CommandResponse> {
-    this.ensureWholesalerReadOnly(req['user'] as User);
+    this.ensureAdmin(req['user'] as User);
     return this.productService.updateProduct(dto);
   }
 
@@ -179,7 +193,7 @@ export class BusinessController {
     @Body() dto: DeleteProductDto,
     @Req() req: Request,
   ): Promise<CommandResponse> {
-    this.ensureWholesalerReadOnly(req['user'] as User);
+    this.ensureAdmin(req['user'] as User);
     return this.productService.deleteById(dto.ItemId);
   }
 
@@ -272,12 +286,50 @@ export class BusinessController {
   @Post('AddProduction')
   @HttpCode(200)
   @UseGuards(AuthGuard())
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
   AddProduction(
     @Body() dto: AddProductionDto,
     @Req() req: Request,
   ): Promise<CommandResponse> {
-    this.ensureWholesalerReadOnly(req['user'] as User);
-    return this.productService.addProduction(dto);
+    const user = req['user'] as User;
+    this.ensureAdmin(user);
+    return this.productService.addProduction(dto, user);
+  }
+
+  @Post('ListProductBatches')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
+  ListProductBatches(@Body() dto: ListProductBatchesDto, @Req() req: Request) {
+    this.ensureAdmin(req['user'] as User);
+    return this.inventoryService.listBatches(dto, req['user'] as User);
+  }
+
+  @Post('ListBatchItems')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
+  ListBatchItems(@Body() dto: ListBatchItemsDto, @Req() req: Request) {
+    this.ensureAdmin(req['user'] as User);
+    return this.inventoryService.listItems(dto, req['user'] as User);
   }
 
   @Post('GenerateAiSuggestion')

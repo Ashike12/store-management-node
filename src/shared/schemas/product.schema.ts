@@ -6,6 +6,12 @@ import { RootSchema } from './root.schema';
 })
 export class Product extends RootSchema {
   @Prop()
+  CreationRequestId: string;
+
+  @Prop()
+  CreationRequestHash: string;
+
+  @Prop()
   ProductName: string;
 
   @Prop()
@@ -46,3 +52,11 @@ export class Product extends RootSchema {
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);
+
+ProductSchema.index(
+  { CreationRequestId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { CreationRequestId: { $type: 'string' } },
+  },
+);

@@ -162,7 +162,7 @@ Audit dependencies and Node compatibility before choosing upgrade targets; NestJ
 
 ### BE-110 - Inventory batches and globally unique item serials
 
-- Status: TODO - documentation only; implementation deferred by user.
+- Status: COMPLETE - implemented and tested 2026-10-26.
 - Requested: 2026-10-23. Priority: to be assigned.
 - Requirement: creating a product with stock creates a batch; adding quantity to an existing product creates a new batch. Each physical item belongs to one batch and receives a serial formatted BatchId_UniqueId. No two items anywhere in the inventory may share a serial.
 - Data model plan: retain Product as the catalog definition; introduce batch records linked to Product and individual inventory-item records linked to both Product and Batch. One catalog product may have multiple batches. Store quantities, creation time and creating administrator for traceability.
@@ -173,7 +173,8 @@ Audit dependencies and Node compatibility before choosing upgrade targets; NestJ
 - Dependencies: ADMIN-109 provides batch/item inspection; CLIENT-111 preserves public privacy; BE-109 QR design must not encode the admin-only serial in public QR URLs.
 - Decisions before implementation: zero-quantity product creation behavior; handling fractional quantities for yard-based materials; stock correction versus new batch; FIFO/manual batch allocation for sales, returns and cancellations. Do not silently regenerate existing serials on edits.
 - Interpretation: each physical stock item has a batch and serial, while the catalog product may represent many items/batches. Admin product selection should show all associated batches rather than a misleading single batch ID.
-- Verification evidence: not implemented or tested. Required tests include global uniqueness across products/batches, concurrent additions, retry idempotency, rollback consistency and non-admin response exclusion.
+- Implemented decisions: zero-quantity product creation creates no batch; positive intake is whole-unit only and capped at 10,000 units; direct stock edits are rejected; catalog deletion is blocked once inventory history exists; outgoing FIFO/manual allocation remains deferred because raw-material consumption may be fractional.
+- Verification evidence: unit/HTTP tests cover DTOs, service behavior and repeatable permission/index seeds. `test/inventory-batches.integration.ts` uses an isolated MongoDB replica set to verify globally unique serials across products/batches, initial/later batch separation, concurrent/repeated request idempotency, transaction rollback, admin-only reads and public-response exclusion. See `docs/INVENTORY_BATCHES.md`.
 
 ### BE-111 - Employees, work ledger, payments and review feedback
 

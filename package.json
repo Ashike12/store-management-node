@@ -22,7 +22,8 @@
     "test:debug": "node --inspect-brk --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
     "test:e2e": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./test/jest-e2e.json",
     "typecheck": "tsc --noEmit --incremental false",
-    "test:integration": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./test/jest-integration.json --runInBand"
+    "test:integration": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./test/jest-integration.json --runInBand",
+    "seed:inventory": "node scripts/seed-inventory-batches.cjs"
   },
   "dependencies": {
     "@nestjs/common": "12.2.0",

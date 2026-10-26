@@ -31,7 +31,7 @@ export class UpdateProductDto {
 
   readonly EndUserDiscountedPrice: number;
 
-  Quantity: number;
+  readonly Quantity: number;
 
   readonly Description: string;
 }
