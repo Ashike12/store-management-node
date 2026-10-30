@@ -67,4 +67,8 @@ export class CreateProductDto {
   @Max(10000)
   @IsNotEmpty()
   readonly Quantity: number;
+
+  @IsOptional()
+  @IsString()
+  readonly MadeByEmployeeId?: string;
 }

@@ -2,7 +2,7 @@ const endpoints = [
   { FeatureId: 'ConfigureProductQr', roles: ['admin'] },
   {
     FeatureId: 'VerifyProductQr',
-    roles: ['annonymous', 'customer', 'appuser', 'admin', 'wholesaler'],
+    roles: ['annonymous', 'customer', 'appuser', 'admin', 'wholesaler', 'employee'],
   },
 ];
 

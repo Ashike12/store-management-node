@@ -18,6 +18,8 @@ export class InventoryService {
     private readonly batches: Model<InventoryBatch>,
     @InjectModel(InventoryItem.name)
     private readonly items: Model<InventoryItem>,
+    @InjectModel(User.name)
+    private readonly users: Model<User>,
   ) {}
 
   private ensureAdmin(user?: User) {
@@ -32,7 +34,19 @@ export class InventoryService {
     CreatedBy: string,
     RequestId: string,
     session: ClientSession,
+    MadeByEmployeeId?: string,
   ) {
+    let maker: User | null = null;
+    if (MadeByEmployeeId) {
+      maker = await this.users.findOne({
+        _id: MadeByEmployeeId,
+        Roles: UserRoles.Employee,
+        Active: true,
+      });
+      if (!maker) {
+        throw new ForbiddenException('Selected maker is not an active employee');
+      }
+    }
     const BatchId = `BAT${randomUUID().replace(/-/g, '').toUpperCase()}`;
     const CreatedDate = new Date().toISOString();
     await this.batches.create(
@@ -44,6 +58,7 @@ export class InventoryService {
           QuantityReceived,
           CreatedBy,
           RequestId,
+          MadeByEmployeeId: maker ? String(maker._id) : undefined,
           CreatedDate,
           RolesAllowedToRead: [UserRoles.Admin],
         },
@@ -64,7 +79,15 @@ export class InventoryService {
       };
     });
     await this.items.insertMany(records, { session, ordered: true });
-    return { BatchId, ProductId, QuantityReceived, CreatedDate };
+    return {
+      BatchId,
+      ProductId,
+      QuantityReceived,
+      MadeByEmployeeId: maker ? String(maker._id) : null,
+      MakerName: maker?.DisplayName ||
+        [maker?.FirstName, maker?.LastName].filter(Boolean).join(' ') || null,
+      CreatedDate,
+    };
   }
 
   findRequestBatches(RequestId: string) {
@@ -80,14 +103,27 @@ export class InventoryService {
     const filter = { ProductId: dto.ProductId };
     const Data = await this.batches
       .find(filter)
-      .select('BatchId ProductId QuantityReceived CreatedBy CreatedDate')
+      .select('BatchId ProductId QuantityReceived CreatedBy MadeByEmployeeId CreatedDate')
       .sort({ CreatedDate: -1, BatchId: -1 })
       .skip((dto.Page - 1) * dto.Size)
       .limit(dto.Size)
       .lean();
+    const makerIds = [...new Set(Data.map((item: any) => item.MadeByEmployeeId).filter(Boolean))];
+    const makers = makerIds.length
+      ? await this.users.find({ _id: { $in: makerIds } }).select('_id DisplayName FirstName LastName').lean()
+      : [];
+    const makerNames = new Map(makers.map((maker: any) => [
+      String(maker._id),
+      maker.DisplayName || [maker.FirstName, maker.LastName].filter(Boolean).join(' '),
+    ]));
     return {
       IsSuccess: true,
-      Data,
+      Data: Data.map((item: any) => ({
+        ...item,
+        MakerName: item.MadeByEmployeeId
+          ? makerNames.get(String(item.MadeByEmployeeId)) || 'Former employee'
+          : null,
+      })),
       TotalCount: await this.batches.countDocuments(filter),
     };
   }

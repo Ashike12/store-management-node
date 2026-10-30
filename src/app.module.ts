@@ -8,6 +8,7 @@ import { UserModule } from './user/user.module';
 import { StorageModule } from './storage/storage.module';
 import { BusinessModule } from './business/business.module';
 import { buildMongoUri } from './build-mongo-uri';
+import { EmployeeModule } from './employee/employee.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { buildMongoUri } from './build-mongo-uri';
     AuthModule,
     StorageModule,
     BusinessModule,
+    EmployeeModule,
   ],
   controllers: [AppController],
   providers: [AppService],

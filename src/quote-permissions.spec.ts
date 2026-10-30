@@ -30,7 +30,7 @@ describe('BE-102 permission seed', () => {
     const first = [...records.entries()];
     await seedBuilderQuote(db);
     expect([...records.entries()]).toEqual(first);
-    expect(records.size).toBe(10);
+    expect(records.size).toBe(12);
     for (const [key, row] of records) {
       expect(row.FeatureId).toBe('QuoteBuilder');
       expect(roles).toContain(row.RoleName);

@@ -75,7 +75,12 @@ export class AuthService {
       throw new UnauthorizedException('Incorrect email or password');
     }
     console.log(user.Email);
-    if (user && user.Roles.indexOf(UserRoles.Customer) > -1 && !user.Active) {
+    if (
+      user &&
+      (user.Roles.includes(UserRoles.Customer) ||
+        user.Roles.includes(UserRoles.Employee)) &&
+      !user.Active
+    ) {
       throw new UnauthorizedException('Inactive Customer');
     }
     const isPasswordMatched = await bcrypt.compare(Password, user.Password);

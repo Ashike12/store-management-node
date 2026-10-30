@@ -85,6 +85,7 @@ describe('ProductService with isolated persistence', () => {
       'admin-1',
       product.RequestId,
       session,
+      undefined,
     );
   });
   it('rejects duplicate product identity', async () => {
@@ -296,6 +297,7 @@ describe('ProductService with isolated persistence', () => {
       'admin-1',
       'production-request-1',
       session,
+      undefined,
     );
   });
 });

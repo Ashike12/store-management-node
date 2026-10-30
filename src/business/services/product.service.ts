@@ -111,6 +111,7 @@ export class ProductService {
             String(user._id),
             dto.RequestId,
             session,
+            dto.MadeByEmployeeId,
           );
         }
       });
@@ -477,6 +478,7 @@ export class ProductService {
               String(user._id),
               dto.RequestId,
               session,
+              entry.MadeByEmployeeId,
             ),
           );
         }
@@ -502,14 +504,18 @@ export class ProductService {
 
   private assertReplayMatches(dto: AddProductionDto, batches: any[]) {
     const expected = new Map(
-      dto.ProductionInfo.map((x) => [x.ProductId, x.Quantity]),
+      dto.ProductionInfo.map((x) => [x.ProductId, {
+        Quantity: x.Quantity,
+        MadeByEmployeeId: x.MadeByEmployeeId || null,
+      }]),
     );
     const matches =
       batches.length === expected.size &&
-      batches.every(
-        (batch) =>
-          expected.get(batch.ProductId) === Number(batch.QuantityReceived),
-      );
+      batches.every((batch) => {
+        const item = expected.get(batch.ProductId);
+        return item?.Quantity === Number(batch.QuantityReceived) &&
+          item.MadeByEmployeeId === (batch.MadeByEmployeeId || null);
+      });
     if (!matches) {
       throw new ConflictException(
         'RequestId was already used for a different stock intake',
