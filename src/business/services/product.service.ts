@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import * as mongoose from 'mongoose';
 import { UserRoles } from '../../shared/constant/roles.constant';
 import { InjectModel } from '@nestjs/mongoose';
@@ -21,6 +26,9 @@ import { User } from '../../shared/schemas/user.schema';
 import { GetInvoiceDto } from '../dto/product-sell/get-invoice.dto';
 import { AddProductionDto } from '../dto/product/add-production.dto';
 import { PRODUCT_CATEGORY_SUBCATEGORY_MAP } from '../../shared/constant/product.constant';
+import { InventoryService } from './inventory.service';
+import { createHash, randomBytes } from 'crypto';
+import { ConfigureProductQrDto } from '../dto/product/product-qr.dto';
 
 @Injectable()
 export class ProductService {
@@ -34,9 +42,27 @@ export class ProductService {
     @InjectModel(User.name)
     private userModel: mongoose.Model<User>,
     private sharedService: SharedService,
+    private inventoryService: InventoryService,
   ) {}
-  async createProduct(dto: CreateProductDto): Promise<CommandResponse> {
+  async createProduct(
+    dto: CreateProductDto,
+    user: User,
+  ): Promise<CommandResponse> {
     const response = new CommandResponse();
+    const requestHash = this.hashCreateProduct(dto);
+
+    const replay = await this.productModel.findOne({
+      CreationRequestId: dto.RequestId,
+    });
+    if (replay) {
+      if ((replay as any).CreationRequestHash !== requestHash) {
+        throw new ConflictException(
+          'RequestId was already used for a different product creation',
+        );
+      }
+      response.setSuccess({ ItemId: replay._id, Replayed: true });
+      return response;
+    }
 
     const existingData = await this.productModel.findOne({
       ProductName: dto.ProductName,
@@ -53,6 +79,8 @@ export class ProductService {
 
     const dataModel = {
       _id: this.sharedService.getUid(),
+      CreationRequestId: dto.RequestId,
+      CreationRequestHash: requestHash,
       ProductName: dto.ProductName,
       Category: dto.Category,
       SubCategory: dto.SubCategory,
@@ -71,8 +99,49 @@ export class ProductService {
       RolesAllowedToWrite: [UserRoles.Admin],
       CreatedDate: new Date().toISOString(),
     };
-    await this.productModel.create(dataModel);
+    const session = await this.productModel.db.startSession();
+    let batch;
+    try {
+      await session.withTransaction(async () => {
+        await this.productModel.create([dataModel], { session });
+        if (dto.Quantity > 0) {
+          batch = await this.inventoryService.createBatch(
+            dataModel._id,
+            dto.Quantity,
+            String(user._id),
+            dto.RequestId,
+            session,
+            dto.MadeByEmployeeId,
+          );
+        }
+      });
+    } catch (error) {
+      if ((error as any)?.code === 11000) {
+        const existing = await this.productModel.findOne({
+          CreationRequestId: dto.RequestId,
+        });
+        if (existing) {
+          if ((existing as any).CreationRequestHash !== requestHash) {
+            throw new ConflictException(
+              'RequestId was already used for a different product creation',
+            );
+          }
+          response.setSuccess({ ItemId: existing._id, Replayed: true });
+          return response;
+        }
+      }
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+    response.setSuccess({ ItemId: dataModel._id, Batch: batch ?? null });
     return response;
+  }
+
+  private hashCreateProduct(dto: CreateProductDto): string {
+    const payload: Record<string, unknown> = { ...dto };
+    delete payload.RequestId;
+    return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
   }
 
   private createUpdateObject(dto: UpdateProductDto): any {
@@ -89,7 +158,6 @@ export class ProductService {
     if (dto.EndUserPrice != null) updates['EndUserPrice'] = dto.EndUserPrice;
     if (dto.EndUserDiscountedPrice != null)
       updates['EndUserDiscountedPrice'] = dto.EndUserDiscountedPrice;
-    if (dto.Quantity != null) updates['Quantity'] = dto.Quantity;
     if (dto.Description != null) updates['Description'] = dto.Description;
     return updates;
   }
@@ -114,7 +182,10 @@ export class ProductService {
     return ['MosquitoNet', 'MosquitoNetYard'].includes(category);
   }
 
-  private getNetHeightDuplicateQuery(category: string, netHeight?: string): any {
+  private getNetHeightDuplicateQuery(
+    category: string,
+    netHeight?: string,
+  ): any {
     const normalizedHeight = this.shouldUseNetHeight(category)
       ? (netHeight ?? '')
       : '';
@@ -137,6 +208,15 @@ export class ProductService {
       this.validateCategoryAndSubCategory(nextCategory, nextSubCategory);
     }
 
+    if (
+      dto.Quantity != null &&
+      Number(dto.Quantity) !== Number((existingData as any).Quantity)
+    ) {
+      throw new BadRequestException(
+        'Stock quantity cannot be edited directly; use AddProduction',
+      );
+    }
+
     await this.productModel.findByIdAndUpdate(
       dto.ItemId,
       this.createUpdateObject(dto),
@@ -154,6 +234,11 @@ export class ProductService {
     const existingData = await this.productModel.findOne({ _id: id });
     if (!existingData) {
       throw new BadRequestException('Data not found');
+    }
+    if (await this.inventoryService.hasBatches(id)) {
+      throw new ConflictException(
+        'Products with inventory history cannot be deleted',
+      );
     }
 
     await this.productModel.findByIdAndDelete(id);
@@ -184,6 +269,58 @@ export class ProductService {
       responseCompanies.push(this.mapClientProductResponse(x));
     });
     response.setData(responseCompanies, dataCount);
+    return response;
+  }
+
+  async configureQrVerification(
+    dto: ConfigureProductQrDto,
+  ): Promise<CommandResponse> {
+    const product = await this.productModel.findOne({ _id: dto.ItemId });
+    if (!product) {
+      throw new BadRequestException('Product not found');
+    }
+
+    const shouldEnable = dto.Action !== 'disable';
+    let token = (product as any).QrVerificationToken as string | undefined;
+    if (dto.Action === 'rotate' || (shouldEnable && !token)) {
+      token = randomBytes(24).toString('base64url');
+    }
+
+    const updates: Record<string, unknown> = {
+      QrVerificationEnabled: shouldEnable,
+    };
+    if (token) updates.QrVerificationToken = token;
+
+    await this.productModel.findByIdAndUpdate(dto.ItemId, updates, {
+      new: true,
+      runValidators: true,
+    });
+
+    const response = new CommandResponse();
+    response.setSuccess({
+      ItemId: dto.ItemId,
+      QrVerificationEnabled: shouldEnable,
+      QrVerificationUrl:
+        shouldEnable && token ? this.buildQrVerificationUrl(token) : null,
+    });
+    return response;
+  }
+
+  async verifyProductQr(token: string): Promise<CommandResponse> {
+    const product = await this.productModel.findOne({
+      QrVerificationToken: token,
+      QrVerificationEnabled: true,
+    });
+    if (!product) {
+      throw new NotFoundException('Product verification code not found');
+    }
+
+    const imageLinks = this.getImageLinks(product);
+    const response = new CommandResponse();
+    response.setSuccess({
+      ProductName: product.ProductName,
+      ImageUrl: imageLinks[0] ?? null,
+    });
     return response;
   }
 
@@ -239,12 +376,8 @@ export class ProductService {
   }
 
   private mapAdminProductResponse(x: Product): any {
-    const imageLinks =
-      x.ImageLinks && x.ImageLinks.length > 0
-        ? x.ImageLinks
-        : (x as any).ImageLink && typeof (x as any).ImageLink === 'string'
-          ? [(x as any).ImageLink]
-          : [];
+    const imageLinks = this.getImageLinks(x);
+    const qrToken = (x as any).QrVerificationToken as string | undefined;
     return {
       ItemId: x._id,
       ProductName: x.ProductName,
@@ -262,17 +395,17 @@ export class ProductService {
       EndUserDiscountedPrice:
         (x as any).EndUserDiscountedPrice ?? (x as any).SellingPrice ?? 0,
       Quantity: x.Quantity,
+      QrVerificationEnabled: Boolean((x as any).QrVerificationEnabled),
+      QrVerificationUrl:
+        (x as any).QrVerificationEnabled && qrToken
+          ? this.buildQrVerificationUrl(qrToken)
+          : null,
       CreatedDate: x.CreatedDate,
     };
   }
 
   private mapClientProductResponse(x: Product): any {
-    const imageLinks =
-      x.ImageLinks && x.ImageLinks.length > 0
-        ? x.ImageLinks
-        : (x as any).ImageLink && typeof (x as any).ImageLink === 'string'
-          ? [(x as any).ImageLink]
-          : [];
+    const imageLinks = this.getImageLinks(x);
     return {
       ItemId: x._id,
       ProductName: x.ProductName,
@@ -291,22 +424,102 @@ export class ProductService {
     };
   }
 
-  async addProduction(dto: AddProductionDto): Promise<CommandResponse> {
-    const response = new CommandResponse();
+  private getImageLinks(product: Product): string[] {
+    if (product.ImageLinks?.length) return product.ImageLinks;
+    const legacyImage = (product as any).ImageLink;
+    return typeof legacyImage === 'string' && legacyImage ? [legacyImage] : [];
+  }
 
-    for (const eachProduct of dto.ProductionInfo) {
-      const productUpdateDto = new UpdateProductDto();
-      productUpdateDto.Quantity = eachProduct.Quantity;
-      await this.productModel.findByIdAndUpdate(
-        eachProduct.ProductId,
-        this.createUpdateObject(productUpdateDto),
-        {
-          new: true,
-          runValidators: true,
-        },
+  private buildQrVerificationUrl(token: string): string | null {
+    const clientUrl = process.env.PUBLIC_CLIENT_URL?.trim().replace(/\/$/, '');
+    return clientUrl ? `${clientUrl}/verify-product/${token}` : null;
+  }
+
+  async addProduction(
+    dto: AddProductionDto,
+    user: User,
+  ): Promise<CommandResponse> {
+    const response = new CommandResponse();
+    const uniqueProducts = new Set(dto.ProductionInfo.map((x) => x.ProductId));
+    if (uniqueProducts.size !== dto.ProductionInfo.length) {
+      throw new BadRequestException(
+        'A product can appear only once per intake',
       );
     }
 
+    const replay = await this.inventoryService.findRequestBatches(
+      dto.RequestId,
+    );
+    if (replay.length) {
+      this.assertReplayMatches(dto, replay);
+      response.setSuccess({ Batches: replay, Replayed: true });
+      return response;
+    }
+
+    const session = await this.productModel.db.startSession();
+    const batches = [];
+    try {
+      await session.withTransaction(async () => {
+        for (const entry of dto.ProductionInfo) {
+          const result = await this.productModel.updateOne(
+            { _id: entry.ProductId },
+            { $inc: { Quantity: entry.Quantity } },
+            { session, runValidators: true },
+          );
+          if (result.matchedCount !== 1) {
+            throw new BadRequestException(
+              'Product not found: ' + entry.ProductId,
+            );
+          }
+          batches.push(
+            await this.inventoryService.createBatch(
+              entry.ProductId,
+              entry.Quantity,
+              String(user._id),
+              dto.RequestId,
+              session,
+              entry.MadeByEmployeeId,
+            ),
+          );
+        }
+      });
+    } catch (error) {
+      if ((error as any)?.code === 11000) {
+        const existing = await this.inventoryService.findRequestBatches(
+          dto.RequestId,
+        );
+        if (existing.length) {
+          this.assertReplayMatches(dto, existing);
+          response.setSuccess({ Batches: existing, Replayed: true });
+          return response;
+        }
+      }
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+    response.setSuccess({ Batches: batches });
     return response;
+  }
+
+  private assertReplayMatches(dto: AddProductionDto, batches: any[]) {
+    const expected = new Map(
+      dto.ProductionInfo.map((x) => [x.ProductId, {
+        Quantity: x.Quantity,
+        MadeByEmployeeId: x.MadeByEmployeeId || null,
+      }]),
+    );
+    const matches =
+      batches.length === expected.size &&
+      batches.every((batch) => {
+        const item = expected.get(batch.ProductId);
+        return item?.Quantity === Number(batch.QuantityReceived) &&
+          item.MadeByEmployeeId === (batch.MadeByEmployeeId || null);
+      });
+    if (!matches) {
+      throw new ConflictException(
+        'RequestId was already used for a different stock intake',
+      );
+    }
   }
 }

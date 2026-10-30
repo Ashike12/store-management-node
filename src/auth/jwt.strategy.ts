@@ -49,6 +49,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     if (
+      user.Roles?.includes(UserRoles.Employee) &&
+      !user.Roles?.includes(UserRoles.Admin) &&
+      !this.isEmployeeRouteAllowed(currentApiRoute)
+    ) {
+      throw new ForbiddenException('Employee accounts can only access their own workspace');
+    }
+
+    if (
       permissionCount == 0 &&
       !this.hasFallbackPermission(payload, currentApiRoute)
     ) {
@@ -88,6 +96,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return ['business/getinvoice', 'business/getdashboarddata'].includes(
       currentApiRoute,
     );
+  }
+
+  private isEmployeeRouteAllowed(currentApiRoute: string): boolean {
+    return [
+      'user/me',
+      'user/updateprofile',
+      'user/update-profile',
+      'user/changepassword',
+      'user/change-password',
+      'employee/getoverview',
+      'employee/submitfeedback',
+    ].includes(currentApiRoute);
   }
 
   isTokenExpired(exp: number): boolean {

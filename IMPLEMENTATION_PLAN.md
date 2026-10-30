@@ -149,7 +149,7 @@ Audit dependencies and Node compatibility before choosing upgrade targets; NestJ
 
 ### BE-109 - Optional product QR verification
 
-- Status: TODO - documentation only; implementation deferred by user.
+- Status: COMPLETE - implemented and tested 2026-10-26.
 - Requested: 2026-10-23. Priority: to be assigned.
 - Requirement: QR verification is available only for specifically enabled products, not automatically for the entire catalog. Scanning a code on a physical product identifies the linked product and displays its name and image.
 - Backend scope: store the opt-in setting and code-to-product association; provide an authorized management operation and public verification lookup. The lookup returns only public product information, never cost, wholesale prices, customer or invoice data.
@@ -157,12 +157,12 @@ Audit dependencies and Node compatibility before choosing upgrade targets; NestJ
 - Acceptance: a valid enabled code resolves to the correct product name/image; disabled, invalid or removed codes do not return a successful verification result; unauthorized users cannot enable or assign codes.
 - Source areas: src/shared/schemas/product.schema.ts, src/business/dto/product/, src/business/services/product.service.ts, src/business/business.controller.ts; dedicated QR storage/service if individual-item codes are chosen.
 - Dependencies: ADMIN-108 manages selected products and labels; CLIENT-110 displays scan results. Configure the public client URL for QR destinations without embedding secrets.
-- Decision before implementation: one shared code per catalog product versus unique codes per physical item/batch. User has requested product identification, not yet item-level authenticity or ownership verification. A copied shared QR code cannot prove a physical item is genuine.
-- Verification evidence: not implemented or tested.
+- Decision: one opaque shared code per opted-in catalog product. It identifies the catalog product but does not claim item authenticity, purchase or ownership and never encodes an inventory serial.
+- Verification evidence: admin-only enable/disable/rotate, public rate-limited lookup, unique token index, replay-safe permission seed and public response-projection tests. See `docs/PRODUCT_QR_VERIFICATION.md`.
 
 ### BE-110 - Inventory batches and globally unique item serials
 
-- Status: TODO - documentation only; implementation deferred by user.
+- Status: COMPLETE - implemented and tested 2026-10-26.
 - Requested: 2026-10-23. Priority: to be assigned.
 - Requirement: creating a product with stock creates a batch; adding quantity to an existing product creates a new batch. Each physical item belongs to one batch and receives a serial formatted BatchId_UniqueId. No two items anywhere in the inventory may share a serial.
 - Data model plan: retain Product as the catalog definition; introduce batch records linked to Product and individual inventory-item records linked to both Product and Batch. One catalog product may have multiple batches. Store quantities, creation time and creating administrator for traceability.
@@ -173,7 +173,8 @@ Audit dependencies and Node compatibility before choosing upgrade targets; NestJ
 - Dependencies: ADMIN-109 provides batch/item inspection; CLIENT-111 preserves public privacy; BE-109 QR design must not encode the admin-only serial in public QR URLs.
 - Decisions before implementation: zero-quantity product creation behavior; handling fractional quantities for yard-based materials; stock correction versus new batch; FIFO/manual batch allocation for sales, returns and cancellations. Do not silently regenerate existing serials on edits.
 - Interpretation: each physical stock item has a batch and serial, while the catalog product may represent many items/batches. Admin product selection should show all associated batches rather than a misleading single batch ID.
-- Verification evidence: not implemented or tested. Required tests include global uniqueness across products/batches, concurrent additions, retry idempotency, rollback consistency and non-admin response exclusion.
+- Implemented decisions: zero-quantity product creation creates no batch; positive intake is whole-unit only and capped at 10,000 units; direct stock edits are rejected; catalog deletion is blocked once inventory history exists; outgoing FIFO/manual allocation remains deferred because raw-material consumption may be fractional.
+- Verification evidence: unit/HTTP tests cover DTOs, service behavior and repeatable permission/index seeds. `test/inventory-batches.integration.ts` uses an isolated MongoDB replica set to verify globally unique serials across products/batches, initial/later batch separation, concurrent/repeated request idempotency, transaction rollback, admin-only reads and public-response exclusion. See `docs/INVENTORY_BATCHES.md`.
 
 ### BE-111 - Employees, work ledger, payments and review feedback
 

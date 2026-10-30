@@ -6,6 +6,12 @@ import { RootSchema } from './root.schema';
 })
 export class Product extends RootSchema {
   @Prop()
+  CreationRequestId: string;
+
+  @Prop()
+  CreationRequestHash: string;
+
+  @Prop()
   ProductName: string;
 
   @Prop()
@@ -43,6 +49,28 @@ export class Product extends RootSchema {
 
   @Prop()
   Quantity: number;
+
+  @Prop({ default: false })
+  QrVerificationEnabled: boolean;
+
+  @Prop()
+  QrVerificationToken?: string;
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);
+
+ProductSchema.index(
+  { CreationRequestId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { CreationRequestId: { $type: 'string' } },
+  },
+);
+
+ProductSchema.index(
+  { QrVerificationToken: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { QrVerificationToken: { $type: 'string' } },
+  },
+);

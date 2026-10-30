@@ -1,7 +1,7 @@
 const feature = 'QuoteBuilder';
 const endpoint = 'business/QuoteBuilder';
 // Public storefront access, including the application's existing anonymous role.
-const roles = ['annonymous', 'customer', 'appuser', 'admin', 'wholesaler'];
+const roles = ['annonymous', 'customer', 'appuser', 'admin', 'wholesaler', 'employee'];
 
 async function seedBuilderQuote(db) {
   for (const RoleName of roles) {

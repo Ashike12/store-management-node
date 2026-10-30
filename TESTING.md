@@ -31,10 +31,17 @@ Coverage output is ignored by Git: `coverage/lcov-report/index.html`, `coverage/
 | App (1) | GET `/` |
 | Auth (5) | POST `/auth/signup`, `/auth/token`, `/auth/refresh`, `/auth/setPassword`, `/auth/getloginlog` |
 | User (9) | GET `/user/get`, `/user/me`, `/user/getById/:id`; POST `/user/getByEmail`, `/user/createCustomer`, `/user/update`, `/user/update-profile`, `/user/change-password`, `/user/delete` |
-| Business (17) | POST `/business/ListOrders`, `/business/GetOrder`, `/business/TransitionOrder`, `/business/QuoteBuilder`, `/business/GetProducts`, `/business/GetClientProducts`, `/business/CreateClientOrder`, `/business/CreateProduct`, `/business/UpdateProduct`, `/business/DeleteProduct`, `/business/CreateInvoice`, `/business/UpdateInvoice`, `/business/GetInvoice`, `/business/DeleteInvoice`, `/business/GetDashboardData`, `/business/AddProduction`, `/business/GenerateAiSuggestion` |
+| Business (19) | POST `/business/ListOrders`, `/business/GetOrder`, `/business/TransitionOrder`, `/business/QuoteBuilder`, `/business/GetProducts`, `/business/GetClientProducts`, `/business/CreateClientOrder`, `/business/CreateProduct`, `/business/UpdateProduct`, `/business/DeleteProduct`, `/business/CreateInvoice`, `/business/UpdateInvoice`, `/business/GetInvoice`, `/business/DeleteInvoice`, `/business/GetDashboardData`, `/business/AddProduction`, `/business/ListProductBatches`, `/business/ListBatchItems`, `/business/GenerateAiSuggestion` |
 | Storage (5) | POST `/storage/uploadFile`; GET `/storage/getFiles`, `/storage/getFilesByUser/:userId`, `/storage/getFile/:fileId`, `/storage/deleteFile/:fileId` |
 
 ## Focused service coverage
+
+### BE-110 inventory batches
+
+- `src/business/services/product.service.spec.ts` covers idempotent creation/intake contracts, increment semantics, direct-stock-edit rejection and inventory-history deletion protection.
+- `src/inventory-permissions.spec.ts` replays the admin-only endpoint seed and asserts global uniqueness indexes.
+- `test/inventory-batches.integration.ts` uses an isolated replica set for transactional creation, concurrent replay, global serial uniqueness, rollback and response privacy.
+- Verification on 2026-10-26: 461 tests across 20 unit/contract suites, 26 tests across 3 integration suites and TypeScript typecheck passed. The configured database permission/index seed was also applied successfully.
 
 - Product: create/update/delete, category validation, duplicate rejection, combined search/price/category filters, `size`/`page` pagination, public price privacy and production quantity replacement behavior.
 - Invoice: due-payment amounts, required wholesaler/product validation, own-invoice scoping, product sale stock changes, edit restoration, and dashboard query scoping/profit privacy. Aggregate results are mocked; these tests do not evaluate MongoDB pipelines.
@@ -130,3 +137,12 @@ Final BE-103/104 run: 412 unit/contract tests (19 suites), 150 HTTP matrix tests
 - Wholesaler list, detail and dashboard responses omit private cost and margin fields.
 - Verification: 449 tests across 19 unit/contract suites, 168 HTTP tests, 21 isolated MongoDB integration tests, and TypeScript typecheck passed.
 - Reporting terminology for recovered due remains BE-107. No new endpoint or permission seed was introduced. See docs/INVOICE_CONSISTENCY.md.
+
+## BE-109 product QR verification (2026-10-26)
+
+- Product-level QR verification is opt-in and disabled for existing products by default. Admins can enable, disable or rotate a cryptographically random opaque token.
+- The public rate-limited lookup returns only the product name and first public image. Tests assert that prices, QR configuration and inventory serials are absent.
+- DTO and HTTP tests cover malformed tokens/actions, anonymous verification, admin-only configuration, wholesaler denial, errors and rate limiting.
+- The replay-safe seed writes both endpoints to `FeatureEndpointMap` and `FeatureRoleMap`, creates the unique sparse token index, and was applied successfully to the configured database.
+- Final verification: 475 tests across 21 unit/contract suites, 26 isolated MongoDB integration tests, and TypeScript typecheck passed. Admin 53 tests and client 56 tests passed with their TypeScript checks. No builds were run.
+- Deployment/configuration contract: [PRODUCT_QR_VERIFICATION.md](docs/PRODUCT_QR_VERIFICATION.md).

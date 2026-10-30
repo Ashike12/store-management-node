@@ -13,6 +13,15 @@ import { ProductService } from './services/product.service';
 import { InvoiceService } from './services/invoice.service';
 import { ClientOrderService } from './services/client-order.service';
 import { AiSuggestionService } from './services/ai-suggestion.service';
+import {
+  InventoryBatch,
+  InventoryBatchSchema,
+} from '../shared/schemas/inventory-batch.schema';
+import {
+  InventoryItem,
+  InventoryItemSchema,
+} from '../shared/schemas/inventory-item.schema';
+import { InventoryService } from './services/inventory.service';
 
 @Module({
   imports: [
@@ -23,6 +32,8 @@ import { AiSuggestionService } from './services/ai-suggestion.service';
       { name: 'ProductSell', schema: ProductSellSchema },
       { name: 'Invoice', schema: InvoiceSchema },
       { name: 'Order', schema: OrderSchema },
+      { name: InventoryBatch.name, schema: InventoryBatchSchema },
+      { name: InventoryItem.name, schema: InventoryItemSchema },
     ]),
   ],
   controllers: [BusinessController],
@@ -33,6 +44,7 @@ import { AiSuggestionService } from './services/ai-suggestion.service';
     ClientOrderService,
     OrderOperationsService,
     AiSuggestionService,
+    InventoryService,
   ],
 })
 export class BusinessModule {}
