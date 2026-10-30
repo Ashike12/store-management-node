@@ -1,6 +1,7 @@
 const endpointRoles = {
   CreateEmployee: ['admin'],
   ListEmployees: ['admin'],
+  ListEmployeeBatches: ['admin'],
   UpdateEmployee: ['admin'],
   DeactivateEmployee: ['admin'],
   GetOverview: ['admin', 'employee'],

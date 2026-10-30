@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from '../auth/auth.module';
 import { InventoryBatch, InventoryBatchSchema } from '../shared/schemas/inventory-batch.schema';
 import { User, UserSchema } from '../shared/schemas/user.schema';
+import { Product, ProductSchema } from '../shared/schemas/product.schema';
 import { EmployeeController } from './employee.controller';
 import { EmployeeService } from './employee.service';
 import { EmployeeFeedback, EmployeeFeedbackSchema } from './schemas/employee-feedback.schema';
@@ -16,6 +17,7 @@ import { EmployeeWorkEntry, EmployeeWorkEntrySchema } from './schemas/employee-w
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: InventoryBatch.name, schema: InventoryBatchSchema },
+      { name: Product.name, schema: ProductSchema },
       { name: EmployeeWorkEntry.name, schema: EmployeeWorkEntrySchema },
       { name: EmployeePaymentEntry.name, schema: EmployeePaymentEntrySchema },
       { name: EmployeeFeedback.name, schema: EmployeeFeedbackSchema },

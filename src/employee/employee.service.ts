@@ -12,12 +12,14 @@ import { ClientSession, Model } from 'mongoose';
 import { UserRoles } from '../shared/constant/roles.constant';
 import { InventoryBatch } from '../shared/schemas/inventory-batch.schema';
 import { User } from '../shared/schemas/user.schema';
+import { Product } from '../shared/schemas/product.schema';
 import {
   CreateEmployeeDto,
   CreatePaymentEntryDto,
   CreateWorkEntryDto,
   EmployeeOverviewDto,
   ListEmployeesDto,
+  ListEmployeeBatchesDto,
   ListNotificationsDto,
   ResolveFeedbackDto,
   SubmitFeedbackDto,
@@ -44,6 +46,8 @@ export class EmployeeService {
     private readonly audits: Model<EmployeeLedgerAudit>,
     @InjectModel(InventoryBatch.name)
     private readonly batches: Model<InventoryBatch>,
+    @InjectModel(Product.name)
+    private readonly products: Model<Product>,
   ) {}
 
   private ensureAdmin(user: User) {
@@ -120,6 +124,61 @@ export class EmployeeService {
       RolesAllowedToUpdate: [UserRoles.Admin],
     });
     return { IsSuccess: true, Data: { ItemId: _id } };
+  }
+
+  async listEmployeeBatches(dto: ListEmployeeBatchesDto, admin: User) {
+    this.ensureAdmin(admin);
+    await this.requireEmployee(dto.EmployeeId);
+
+    const filter: Record<string, unknown> = { MadeByEmployeeId: dto.EmployeeId };
+    const term = dto.SearchTerm?.trim();
+    if (term) {
+      const safe = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const expression = new RegExp(safe, 'i');
+      const matchingProducts = await this.products
+        .find({ ProductName: expression })
+        .select('_id')
+        .limit(50)
+        .lean();
+      filter.$or = [
+        { BatchId: expression },
+        { ProductId: { $in: matchingProducts.map((item: any) => String(item._id)) } },
+      ];
+    }
+
+    const [batches, TotalCount] = await Promise.all([
+      this.batches
+        .find(filter)
+        .select('BatchId ProductId QuantityReceived CreatedDate')
+        .sort({ CreatedDate: -1, BatchId: -1 })
+        .skip((dto.Page - 1) * dto.Size)
+        .limit(dto.Size)
+        .lean(),
+      this.batches.countDocuments(filter),
+    ]);
+    const productIds = [...new Set(batches.map((batch: any) => String(batch.ProductId)))];
+    const products = await this.products
+      .find({ _id: { $in: productIds } })
+      .select('_id ProductName Category SubCategory')
+      .lean();
+    const productMap = new Map(products.map((product: any) => [String(product._id), product]));
+
+    return {
+      IsSuccess: true,
+      Data: batches.map((batch: any) => {
+        const product = productMap.get(String(batch.ProductId)) as any;
+        return {
+          BatchId: batch.BatchId,
+          ProductId: batch.ProductId,
+          ProductName: product?.ProductName || 'Unknown product',
+          Category: product?.Category || '',
+          SubCategory: product?.SubCategory || '',
+          QuantityReceived: batch.QuantityReceived,
+          CreatedDate: batch.CreatedDate,
+        };
+      }),
+      TotalCount,
+    };
   }
 
   async listEmployees(dto: ListEmployeesDto, admin: User) {

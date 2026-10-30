@@ -7,6 +7,7 @@ import { EmployeePaymentEntry, EmployeePaymentEntrySchema } from '../src/employe
 import { EmployeeWorkEntry, EmployeeWorkEntrySchema } from '../src/employee/schemas/employee-work-entry.schema';
 import { InventoryBatch, InventoryBatchSchema } from '../src/shared/schemas/inventory-batch.schema';
 import { User, UserSchema } from '../src/shared/schemas/user.schema';
+import { Product, ProductSchema } from '../src/shared/schemas/product.schema';
 
 jest.setTimeout(180000);
 
@@ -19,6 +20,7 @@ describe('BE-111 employee ledger on an isolated replica set', () => {
   let feedback: Model<EmployeeFeedback>;
   let audits: Model<EmployeeLedgerAudit>;
   let batches: Model<InventoryBatch>;
+  let products: Model<Product>;
   let service: EmployeeService;
   const admin = { _id: 'admin-1', Roles: ['admin'] } as User;
   const employee = { _id: 'employee-1', Roles: ['employee', 'appuser'] } as User;
@@ -32,8 +34,9 @@ describe('BE-111 employee ledger on an isolated replica set', () => {
     feedback = connection.model(EmployeeFeedback.name, EmployeeFeedbackSchema);
     audits = connection.model(EmployeeLedgerAudit.name, EmployeeLedgerAuditSchema);
     batches = connection.model(InventoryBatch.name, InventoryBatchSchema);
-    await Promise.all([users.init(), work.init(), payments.init(), feedback.init(), audits.init(), batches.init()]);
-    service = new EmployeeService(users, work, payments, feedback, audits, batches);
+    products = connection.model(Product.name, ProductSchema);
+    await Promise.all([users.init(), work.init(), payments.init(), feedback.init(), audits.init(), batches.init(), products.init()]);
+    service = new EmployeeService(users, work, payments, feedback, audits, batches, products);
   });
 
   afterAll(async () => {
@@ -42,10 +45,32 @@ describe('BE-111 employee ledger on an isolated replica set', () => {
   });
 
   beforeEach(async () => {
-    await Promise.all([users.deleteMany({}), work.deleteMany({}), payments.deleteMany({}), feedback.deleteMany({}), audits.deleteMany({}), batches.deleteMany({})]);
+    await Promise.all([users.deleteMany({}), work.deleteMany({}), payments.deleteMany({}), feedback.deleteMany({}), audits.deleteMany({}), batches.deleteMany({}), products.deleteMany({})]);
     await users.create([
       { _id: 'employee-1', DisplayName: 'First Employee', Email: 'one@example.com', Active: true, Roles: ['employee', 'appuser'] },
       { _id: 'employee-2', DisplayName: 'Second Employee', Email: 'two@example.com', Active: true, Roles: ['employee', 'appuser'] },
+    ]);
+  });
+
+  it('searches only batches attributed to the selected employee', async () => {
+    await products.create([
+      { _id: 'product-1', ProductName: 'Bonafide Net', Category: 'MosquitoNet', SubCategory: 'Double' },
+      { _id: 'product-2', ProductName: 'Fishing Net', Category: 'FishingNet', SubCategory: 'Jhaki-Zal' },
+    ]);
+    await batches.create([
+      { _id: 'batch-1', BatchId: 'BAT-EMPLOYEE-ONE', ProductId: 'product-1', QuantityReceived: 10, CreatedBy: 'admin-1', RequestId: 'request-1', MadeByEmployeeId: 'employee-1' },
+      { _id: 'batch-2', BatchId: 'BAT-OTHER-EMPLOYEE', ProductId: 'product-1', QuantityReceived: 8, CreatedBy: 'admin-1', RequestId: 'request-2', MadeByEmployeeId: 'employee-2' },
+      { _id: 'batch-3', BatchId: 'BAT-FISHING', ProductId: 'product-2', QuantityReceived: 6, CreatedBy: 'admin-1', RequestId: 'request-3', MadeByEmployeeId: 'employee-1' },
+    ]);
+
+    const result: any = await service.listEmployeeBatches(
+      { EmployeeId: 'employee-1', SearchTerm: 'Bonafide', Page: 1, Size: 20 },
+      admin,
+    );
+
+    expect(result.TotalCount).toBe(1);
+    expect(result.Data).toEqual([
+      expect.objectContaining({ BatchId: 'BAT-EMPLOYEE-ONE', ProductName: 'Bonafide Net' }),
     ]);
   });
 
