@@ -21,6 +21,7 @@ import {
   EmployeeOverviewDto,
   LedgerItemDto,
   ListEmployeesDto,
+  ListEmployeeBatchesDto,
   ListNotificationsDto,
   NotificationDto,
   ResolveFeedbackDto,
@@ -80,6 +81,11 @@ export class EmployeeController {
   @Post('CreateWorkEntry') @HttpCode(200) @UseGuards(AuthGuard())
   createWorkEntry(@Body() dto: CreateWorkEntryDto, @Req() req: Request) {
     return this.employeeService.createWorkEntry(dto, this.admin(req));
+  }
+
+  @Post('ListEmployeeBatches') @HttpCode(200) @UseGuards(AuthGuard())
+  listEmployeeBatches(@Body() dto: ListEmployeeBatchesDto, @Req() req: Request) {
+    return this.employeeService.listEmployeeBatches(dto, this.admin(req));
   }
 
   @Post('UpdateWorkEntry') @HttpCode(200) @UseGuards(AuthGuard())

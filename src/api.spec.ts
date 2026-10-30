@@ -474,6 +474,12 @@ const cases: Case[] = [
     invalid: { EmployeeId: '', WorkDate: '', Description: '', Amount: 0 },
   },
   {
+    method: 'post', path: '/employee/ListEmployeeBatches', service: EmployeeService,
+    call: 'listEmployeeBatches', restricted: true,
+    body: { EmployeeId: 'employee-1', SearchTerm: 'net', Page: 1, Size: 20 },
+    invalid: { EmployeeId: '', Page: 0, Size: 51 },
+  },
+  {
     method: 'post', path: '/employee/UpdateWorkEntry', service: EmployeeService,
     call: 'updateWorkEntry', restricted: true,
     body: { ItemId: 'work-1', Amount: 550 }, invalid: { ItemId: '', Amount: 0 },

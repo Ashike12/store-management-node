@@ -48,6 +48,12 @@ export class EmployeeOverviewDto {
   @IsOptional() @IsString() EmployeeId?: string;
 }
 
+export class ListEmployeeBatchesDto extends EmployeeIdDto {
+  @IsOptional() @IsString() @MaxLength(100) SearchTerm?: string;
+  @Type(() => Number) @IsInt() @Min(1) Page = 1;
+  @Type(() => Number) @IsInt() @Min(1) @Max(50) Size = 20;
+}
+
 export class CreateWorkEntryDto extends EmployeeIdDto {
   @IsString() @IsNotEmpty() WorkDate: string;
   @IsString() @IsNotEmpty() @MaxLength(500) Description: string;

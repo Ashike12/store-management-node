@@ -8,6 +8,7 @@ describe('BE-111 employee permission seed', () => {
     expect(endpointRoles.GetOverview).toEqual(['admin', 'employee']);
     expect(endpointRoles.SubmitFeedback).toEqual(['employee']);
     expect(endpointRoles.CreateWorkEntry).toEqual(['admin']);
+    expect(endpointRoles.ListEmployeeBatches).toEqual(['admin']);
     expect(endpointRoles.CreatePaymentEntry).toEqual(['admin']);
     expect(endpointRoles.ResolveFeedback).toEqual(['admin']);
   });
