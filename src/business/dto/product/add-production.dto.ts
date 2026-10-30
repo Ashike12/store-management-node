@@ -4,6 +4,7 @@ import {
   IsArray,
   IsInt,
   IsNotEmpty,
+  IsOptional,
   IsString,
   Min,
   Max,
@@ -30,4 +31,8 @@ export class AddProduction {
   @Min(1)
   @Max(10000)
   readonly Quantity: number;
+
+  @IsOptional()
+  @IsString()
+  readonly MadeByEmployeeId?: string;
 }

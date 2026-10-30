@@ -12,6 +12,7 @@ import {
 } from '../src/shared/schemas/inventory-item.schema';
 import { InventoryService } from '../src/business/services/inventory.service';
 import { ProductService } from '../src/business/services/product.service';
+import { User, UserSchema } from '../src/shared/schemas/user.schema';
 
 jest.setTimeout(180000);
 
@@ -21,6 +22,7 @@ describe('BE-110 inventory batches on an isolated replica set', () => {
   let products: Model<Product>;
   let batches: Model<InventoryBatch>;
   let items: Model<InventoryItem>;
+  let users: Model<User>;
   let inventory: InventoryService;
   let service: ProductService;
   const admin = { _id: 'admin-1', Roles: ['admin'] } as any;
@@ -48,8 +50,9 @@ describe('BE-110 inventory batches on an isolated replica set', () => {
     products = connection.model('Product', ProductSchema);
     batches = connection.model('InventoryBatch', InventoryBatchSchema);
     items = connection.model('InventoryItem', InventoryItemSchema);
-    await Promise.all([products.init(), batches.init(), items.init()]);
-    inventory = new InventoryService(batches, items);
+    users = connection.model('User', UserSchema);
+    await Promise.all([products.init(), batches.init(), items.init(), users.init()]);
+    inventory = new InventoryService(batches, items, users);
     service = new ProductService(
       products,
       {} as any,
@@ -70,6 +73,7 @@ describe('BE-110 inventory batches on an isolated replica set', () => {
       items.deleteMany({}),
       batches.deleteMany({}),
       products.deleteMany({}),
+      users.deleteMany({}),
     ]);
   });
 
@@ -87,6 +91,31 @@ describe('BE-110 inventory batches on an isolated replica set', () => {
         item.SerialNumber.startsWith(`${productBatches[0].BatchId}_`),
       ).toBe(true);
     }
+  });
+
+  it('stores an optional active employee maker on the production batch', async () => {
+    await users.create({
+      _id: 'employee-1',
+      DisplayName: 'Net Maker',
+      Active: true,
+      Roles: ['employee', 'appuser'],
+    });
+    await service.createProduct(
+      { ...dto('Employee-made net', 'create-maker', 1), MadeByEmployeeId: 'employee-1' },
+      admin,
+    );
+    const batch = await batches.findOne({ RequestId: 'create-maker' });
+    expect(batch.MadeByEmployeeId).toBe('employee-1');
+
+    await expect(
+      service.addProduction(
+        {
+          RequestId: 'production-inactive-maker',
+          ProductionInfo: [{ ProductId: String(batch.ProductId), Quantity: 1, MadeByEmployeeId: 'missing' }],
+        },
+        admin,
+      ),
+    ).rejects.toThrow('not an active employee');
   });
 
   it('replays create and concurrent production request IDs without double-adding stock', async () => {

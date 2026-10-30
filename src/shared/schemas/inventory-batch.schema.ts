@@ -17,6 +17,9 @@ export class InventoryBatch extends RootSchema {
 
   @Prop({ required: true })
   RequestId: string;
+
+  @Prop({ index: true })
+  MadeByEmployeeId?: string;
 }
 
 export const InventoryBatchSchema =

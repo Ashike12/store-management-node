@@ -4,4 +4,5 @@ export const UserRoles = {
   AppUser: 'appuser',
   Admin: 'admin',
   WholeSaler: 'wholesaler',
+  Employee: 'employee',
 };

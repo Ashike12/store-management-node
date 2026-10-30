@@ -32,6 +32,8 @@ import { StorageController } from './storage/storage.controller';
 import { StorageService } from './storage/storage.service';
 import { RedisHelperService } from './services/redis-helper.service';
 import { InventoryService } from './business/services/inventory.service';
+import { EmployeeController } from './employee/employee.controller';
+import { EmployeeService } from './employee/employee.service';
 
 const product = {
   RequestId: 'product-create-request-1',
@@ -96,6 +98,7 @@ const controllers = [
   UserController,
   BusinessController,
   StorageController,
+  EmployeeController,
 ];
 type Case = {
   method: 'get' | 'post';
@@ -107,6 +110,7 @@ type Case = {
   invalid?: any;
   args?: any[];
   restricted?: boolean;
+  token?: string;
 };
 const cases: Case[] = [
   {
@@ -437,6 +441,91 @@ const cases: Case[] = [
     restricted: true,
   },
   {
+    method: 'post', path: '/employee/CreateEmployee', service: EmployeeService,
+    call: 'createEmployee', restricted: true,
+    body: { FirstName: 'Rafiq', LastName: 'Worker', Email: 'rafiq@example.com', Phone: '01700000001', Address: 'Dhaka', Password: 'strong-password' },
+    invalid: { FirstName: '', Email: 'bad' },
+  },
+  {
+    method: 'post', path: '/employee/ListEmployees', service: EmployeeService,
+    call: 'listEmployees', restricted: true,
+    body: { Status: 'active', Page: 1, Size: 20 }, invalid: { Page: 0, Size: 101 },
+  },
+  {
+    method: 'post', path: '/employee/UpdateEmployee', service: EmployeeService,
+    call: 'updateEmployee', restricted: true,
+    body: { ItemId: 'employee-1', DisplayName: 'Rafiq Worker' }, invalid: { ItemId: '' },
+  },
+  {
+    method: 'post', path: '/employee/DeactivateEmployee', service: EmployeeService,
+    call: 'deactivateEmployee', restricted: true,
+    body: { EmployeeId: 'employee-1' }, invalid: { EmployeeId: '' },
+    args: ['employee-1', user],
+  },
+  {
+    method: 'post', path: '/employee/GetOverview', service: EmployeeService,
+    call: 'getOverview', body: { EmployeeId: 'employee-1' }, invalid: { EmployeeId: 1 },
+    args: [{ EmployeeId: 'employee-1' }, user],
+  },
+  {
+    method: 'post', path: '/employee/CreateWorkEntry', service: EmployeeService,
+    call: 'createWorkEntry', restricted: true,
+    body: { EmployeeId: 'employee-1', WorkDate: '2026-10-27', Description: 'Made mosquito nets', Amount: 500 },
+    invalid: { EmployeeId: '', WorkDate: '', Description: '', Amount: 0 },
+  },
+  {
+    method: 'post', path: '/employee/UpdateWorkEntry', service: EmployeeService,
+    call: 'updateWorkEntry', restricted: true,
+    body: { ItemId: 'work-1', Amount: 550 }, invalid: { ItemId: '', Amount: 0 },
+  },
+  {
+    method: 'post', path: '/employee/DeleteWorkEntry', service: EmployeeService,
+    call: 'deleteWorkEntry', restricted: true,
+    body: { ItemId: 'work-1' }, invalid: { ItemId: '' },
+    args: ['work-1', user],
+  },
+  {
+    method: 'post', path: '/employee/CreatePaymentEntry', service: EmployeeService,
+    call: 'createPaymentEntry', restricted: true,
+    body: { EmployeeId: 'employee-1', PaymentDate: '2026-10-27', Amount: 300, Note: 'Cash' },
+    invalid: { EmployeeId: '', PaymentDate: '', Amount: 0 },
+  },
+  {
+    method: 'post', path: '/employee/UpdatePaymentEntry', service: EmployeeService,
+    call: 'updatePaymentEntry', restricted: true,
+    body: { ItemId: 'payment-1', Amount: 350 }, invalid: { ItemId: '', Amount: 0 },
+  },
+  {
+    method: 'post', path: '/employee/DeletePaymentEntry', service: EmployeeService,
+    call: 'deletePaymentEntry', restricted: true,
+    body: { ItemId: 'payment-1' }, invalid: { ItemId: '' },
+    args: ['payment-1', user],
+  },
+  {
+    method: 'post', path: '/employee/SubmitFeedback', service: EmployeeService,
+    call: 'submitFeedback', token: 'employee',
+    body: { TargetType: 'work', TargetId: 'work-1', Explanation: 'Please review the amount' },
+    invalid: { TargetType: 'other', TargetId: '', Explanation: '' },
+    args: [{ TargetType: 'work', TargetId: 'work-1', Explanation: 'Please review the amount' }, { _id: 'employee-1', Roles: ['employee', 'appuser'] }],
+  },
+  {
+    method: 'post', path: '/employee/ResolveFeedback', service: EmployeeService,
+    call: 'resolveFeedback', restricted: true,
+    body: { FeedbackId: 'feedback-1', Status: 'accepted', ResolutionNote: 'Reviewed' },
+    invalid: { FeedbackId: '', Status: 'pending', ResolutionNote: '' },
+  },
+  {
+    method: 'post', path: '/employee/ListNotifications', service: EmployeeService,
+    call: 'listNotifications', restricted: true,
+    body: { Status: 'unread', Page: 1, Size: 20 }, invalid: { Status: 'bad', Page: 0 },
+  },
+  {
+    method: 'post', path: '/employee/MarkNotificationRead', service: EmployeeService,
+    call: 'markNotificationRead', restricted: true,
+    body: { FeedbackId: 'feedback-1' }, invalid: { FeedbackId: '' },
+    args: ['feedback-1', user],
+  },
+  {
     method: 'post',
     path: '/storage/uploadFile',
     service: StorageService,
@@ -506,6 +595,8 @@ describe('API HTTP contracts (services mocked; no live infrastructure)', () => {
           req.user =
             req.headers.authorization === 'Bearer wholesaler'
               ? { _id: 'wholesaler-1', Roles: ['wholesaler'] }
+              : req.headers.authorization === 'Bearer employee'
+                ? { _id: 'employee-1', Roles: ['employee', 'appuser'] }
               : req.headers.authorization === 'Bearer appuser'
                 ? { _id: 'appuser-1', Roles: ['appuser'] }
                 : user;
@@ -534,7 +625,7 @@ describe('API HTTP contracts (services mocked; no live infrastructure)', () => {
       delete process.env.SRORAGE_LOCATION;
     else process.env.SRORAGE_LOCATION = previousStorageLocation;
   });
-  const send = (c: Case, body = c.body, token = 'admin') => {
+  const send = (c: Case, body = c.body, token = c.token ?? 'admin') => {
     const call = request(app.getHttpServer())[c.method](
       c.path.replace(/:[^/]+/g, 'test-id'),
     );
@@ -586,7 +677,7 @@ describe('API HTTP contracts (services mocked; no live infrastructure)', () => {
   for (const c of cases) {
     describe(`${c.method.toUpperCase()} ${c.path}`, () => {
       it('routes a valid request to the expected service', async () => {
-        const result = await send(c, c.body, c.public ? '' : 'admin').expect(
+        const result = await send(c, c.body, c.public ? '' : (c.token ?? 'admin')).expect(
           200,
         );
         const mock = mocks.get(c.service)[c.call];

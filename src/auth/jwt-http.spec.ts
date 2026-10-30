@@ -87,4 +87,13 @@ describe('Real Passport JWT HTTP verification with mocked models', () => {
     users.findOne.mockResolvedValue(null);
     await send(jwt.sign(claims)).expect(401);
   });
+  it('blocks employee tokens from non-workspace routes even when a role mapping exists', async () => {
+    users.findOne.mockResolvedValue({
+      _id: 'employee-1',
+      Roles: ['appuser', 'employee'],
+    });
+    await send(
+      jwt.sign({UserId: 'employee-1', Roles: ['appuser', 'employee']}),
+    ).expect(403);
+  });
 });
