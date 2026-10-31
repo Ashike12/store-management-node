@@ -36,6 +36,8 @@ describe('ProductService with isolated persistence', () => {
     EndUserPrice: 200,
     EndUserDiscountedPrice: 180,
     Quantity: 10,
+    AverageRating: 4.7,
+    ReviewCount: 12,
   };
   let service: ProductService;
   const admin = { _id: 'admin-1', Roles: ['admin'] } as any;
@@ -197,6 +199,8 @@ describe('ProductService with isolated persistence', () => {
     expect(response).not.toContain('private-opaque-token');
     expect(response).not.toContain('QrVerification');
     expect(response).toContain('EndUserDiscountedPrice');
+    expect(response).toContain('AverageRating');
+    expect(response).toContain('ReviewCount');
     const admin = JSON.stringify(
       await service.getProduct({ size: '10' }, {} as any),
     );

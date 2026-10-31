@@ -54,6 +54,9 @@ export class Order extends RootSchema {
     By: string;
     At: string;
     Note: string;
+    EventType?: string;
+    UpdateDoneBy?: string;
+    ChangedFields?: string[];
   }[];
 
   @Prop()

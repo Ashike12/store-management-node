@@ -22,6 +22,12 @@ import {
   InventoryItemSchema,
 } from '../shared/schemas/inventory-item.schema';
 import { InventoryService } from './services/inventory.service';
+import {
+  ProductReview,
+  ProductReviewSchema,
+} from '../shared/schemas/product-review.schema';
+import { ProductReviewService } from './services/product-review.service';
+import { ProductReviewRateLimitGuard } from '../guards/product-review-rate-limit.guard';
 
 @Module({
   imports: [
@@ -34,6 +40,7 @@ import { InventoryService } from './services/inventory.service';
       { name: 'Order', schema: OrderSchema },
       { name: InventoryBatch.name, schema: InventoryBatchSchema },
       { name: InventoryItem.name, schema: InventoryItemSchema },
+      { name: ProductReview.name, schema: ProductReviewSchema },
     ]),
   ],
   controllers: [BusinessController],
@@ -45,6 +52,8 @@ import { InventoryService } from './services/inventory.service';
     OrderOperationsService,
     AiSuggestionService,
     InventoryService,
+    ProductReviewService,
+    ProductReviewRateLimitGuard,
   ],
 })
 export class BusinessModule {}

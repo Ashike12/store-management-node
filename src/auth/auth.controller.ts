@@ -7,6 +7,8 @@ import {
   Post,
   Req,
   UseGuards,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -19,6 +21,8 @@ import { GetLoginLogsDto } from './dto/getloginlog.dto';
 import { QueryRespone } from '../shared/response/query.response';
 import { Request } from 'express';
 import { User } from '../shared/schemas/user.schema';
+import { ClientSignUpDto } from './dto/client-signup.dto';
+import { RateLimitGuard } from '../guards/rate-limit.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -30,8 +34,25 @@ export class AuthController {
     return this.authService.signUp(signUpDto);
   }
 
+  @Post('/client-signup')
+  @HttpCode(200)
+  @UseGuards(RateLimitGuard(60, 3))
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
+  clientSignUp(
+    @Body() dto: ClientSignUpDto,
+  ): Promise<{ login_token: string; refresh_token: string }> {
+    return this.authService.clientSignUp(dto);
+  }
+
   @Post('/token')
   @HttpCode(200)
+  @UseGuards(RateLimitGuard(60, 10))
   login(
     @Body() loginDto: LoginDto,
   ): Promise<{ login_token: string; refresh_token: string }> {

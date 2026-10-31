@@ -3,6 +3,7 @@ import {
   ListOrdersDto,
   OrderDetailsDto,
   TransitionOrderDto,
+  UpdateOrderInfoDto,
 } from './dto/client-order/order-operations.dto';
 import {
   Controller,
@@ -49,6 +50,12 @@ import {
   ConfigureProductQrDto,
   VerifyProductQrDto,
 } from './dto/product/product-qr.dto';
+import {
+  CreateProductReviewDto,
+  ListProductReviewsDto,
+} from './dto/product/product-review.dto';
+import { ProductReviewService } from './services/product-review.service';
+import { ProductReviewRateLimitGuard } from '../guards/product-review-rate-limit.guard';
 
 @Controller('business')
 export class BusinessController {
@@ -59,6 +66,7 @@ export class BusinessController {
     private clientOrderService: ClientOrderService,
     private aiSuggestionService: AiSuggestionService,
     private inventoryService: InventoryService,
+    private productReviewService: ProductReviewService,
   ) {}
 
   private ensureWholesalerReadOnly(user?: User) {
@@ -119,6 +127,21 @@ export class BusinessController {
     return this.orderOperations.transition(dto, req['user'] as User);
   }
 
+  @Post('UpdateOrderInfo')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
+  UpdateOrderInfo(@Body() dto: UpdateOrderInfoDto, @Req() req: Request) {
+    this.ensureAdmin(req['user'] as User);
+    return this.orderOperations.updateInfo(dto, req['user'] as User);
+  }
+
   @Post('GetProducts')
   @HttpCode(200)
   @UseGuards(AuthGuard())
@@ -147,6 +170,39 @@ export class BusinessController {
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
   VerifyProductQr(@Body() dto: VerifyProductQrDto): Promise<CommandResponse> {
     return this.productService.verifyProductQr(dto.Token);
+  }
+
+  @Post('ListProductReviews')
+  @HttpCode(200)
+  @UseGuards(RateLimitGuard(60, 60))
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
+  ListProductReviews(
+    @Body() dto: ListProductReviewsDto,
+  ): Promise<QueryRespone> {
+    return this.productReviewService.list(dto);
+  }
+
+  @Post('CreateProductReview')
+  @HttpCode(200)
+  @UseGuards(AuthGuard(), ProductReviewRateLimitGuard)
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
+  CreateProductReview(
+    @Body() dto: CreateProductReviewDto,
+    @Req() req: Request,
+  ): Promise<CommandResponse> {
+    return this.productReviewService.create(dto, req['user'] as User);
   }
 
   @Post('ConfigureProductQr')

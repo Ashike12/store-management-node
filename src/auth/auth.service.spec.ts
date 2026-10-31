@@ -5,6 +5,7 @@ jest.mock('bcryptjs', () => ({ compare: jest.fn(), hash: jest.fn() }));
 describe('AuthService', () => {
   const users = {
     findOne: jest.fn(),
+    exists: jest.fn(),
     countDocuments: jest.fn(),
     create: jest.fn(),
     findByIdAndUpdate: jest.fn(),
@@ -28,6 +29,7 @@ describe('AuthService', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     users.findOne.mockResolvedValue(user);
+    users.exists.mockResolvedValue(null);
     users.countDocuments.mockResolvedValue(0);
     jwt.sign.mockReturnValue('signed-test-token');
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
@@ -130,5 +132,31 @@ describe('AuthService', () => {
       service.signUp({ Email: user.Email, Password: 'plain' } as any),
     ).rejects.toMatchObject({ status: 409 });
     expect(users.create).not.toHaveBeenCalled();
+  });
+  it('creates a customer client account and returns login tokens', async () => {
+    users.findOne.mockResolvedValue({
+      ...user,
+      DisplayName: 'Test Customer',
+      Roles: ['customer', 'appuser'],
+    });
+    await expect(
+      service.clientSignUp({
+        FirstName: ' Test ',
+        LastName: ' Customer ',
+        Email: 'CUSTOMER@EXAMPLE.COM',
+        Password: 'password-123',
+      }),
+    ).resolves.toEqual({
+      login_token: 'signed-test-token',
+      refresh_token: 'test-uid',
+    });
+    expect(users.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Email: 'customer@example.com',
+        DisplayName: 'Test Customer',
+        Roles: ['customer', 'appuser'],
+        Active: true,
+      }),
+    );
   });
 });

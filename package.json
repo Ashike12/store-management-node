@@ -25,6 +25,7 @@
     "test:integration": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./test/jest-integration.json --runInBand",
     "seed:inventory": "node scripts/seed-inventory-batches.cjs",
     "seed:product-qr": "node scripts/seed-product-qr.cjs",
+    "seed:product-reviews": "node scripts/seed-product-reviews.cjs",
     "seed:employees": "node scripts/seed-employees.cjs"
   },
   "dependencies": {
