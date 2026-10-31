@@ -13,6 +13,7 @@ import { User } from '../../shared/schemas/user.schema';
 import {
   ListOrdersDto,
   TransitionOrderDto,
+  UpdateOrderInfoDto,
 } from '../dto/client-order/order-operations.dto';
 
 const transitions: Record<string, string[]> = {
@@ -190,6 +191,63 @@ export class OrderOperationsService {
     } finally {
       await session.endSession();
     }
+    return this.detail(dto.ItemId, user);
+  }
+
+  async updateInfo(dto: UpdateOrderInfoDto, user: User) {
+    this.authorize(user);
+    const order = await this.orders.findById(dto.ItemId).lean();
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.Version !== dto.ExpectedVersion)
+      throw new ConflictException('Order changed; refresh before updating');
+
+    const deliveryZone = dto.DeliveryZone;
+    const next = {
+      CustomerName: dto.CustomerName.trim(),
+      PhoneNumber: dto.PhoneNumber,
+      Division: deliveryZone === 'inside_dhaka' ? 'Dhaka' : dto.Division.trim(),
+      District: deliveryZone === 'inside_dhaka' ? 'Dhaka' : dto.District.trim(),
+      Area: dto.Area.trim(),
+      PostCode: dto.PostCode.trim(),
+      Address: dto.Address.trim(),
+      DeliveryNotes: dto.DeliveryNotes?.trim() || '',
+      DeliveryZone: deliveryZone,
+      ShippingCost: deliveryZone === 'inside_dhaka' ? 80 : 150,
+    };
+    const changedFields = Object.keys(next).filter(
+      (key) => String(order[key] ?? '') !== String(next[key]),
+    );
+    if (!changedFields.length)
+      throw new BadRequestException('No order information was changed');
+
+    const totalAmount =
+      Number(order.Subtotal || 0) -
+      Number(order.CouponDiscount || 0) +
+      next.ShippingCost;
+    if (Number(order.TotalAmount) !== totalAmount)
+      changedFields.push('TotalAmount');
+
+    const changed = await this.orders.updateOne(
+      { _id: dto.ItemId, Version: dto.ExpectedVersion },
+      {
+        $set: { ...next, TotalAmount: totalAmount },
+        $inc: { Version: 1 },
+        $push: {
+          AuditHistory: {
+            From: order.OrderStatus,
+            To: order.OrderStatus,
+            By: user._id,
+            At: new Date().toISOString(),
+            Note: dto.Note?.trim() || '',
+            EventType: 'order_info_updated',
+            UpdateDoneBy: dto.UpdateDoneBy,
+            ChangedFields: [...new Set(changedFields)],
+          },
+        },
+      },
+    );
+    if (changed.matchedCount !== 1)
+      throw new ConflictException('Order changed; refresh before updating');
     return this.detail(dto.ItemId, user);
   }
 }

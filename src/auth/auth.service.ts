@@ -19,6 +19,7 @@ import { UserLoginLog } from '../shared/schemas/userloginlog.schema';
 import { GetLoginLogResponseDto } from './dto/getloginlog.response.dto';
 import { QueryRespone } from '../shared/response/query.response';
 import { GetLoginLogsDto } from './dto/getloginlog.dto';
+import { ClientSignUpDto } from './dto/client-signup.dto';
 
 @Injectable()
 export class AuthService {
@@ -63,6 +64,37 @@ export class AuthService {
     });
 
     return true;
+  }
+
+  async clientSignUp(
+    dto: ClientSignUpDto,
+  ): Promise<{ login_token: string; refresh_token: string }> {
+    const Email = dto.Email.trim().toLowerCase();
+    if (await this.userModel.exists({ Email })) {
+      throw new ConflictException('Email already exists');
+    }
+
+    const DisplayName = `${dto.FirstName.trim()} ${dto.LastName.trim()}`;
+    await this.userModel.create({
+      _id: this.sharedService.getUid(),
+      FirstName: dto.FirstName.trim(),
+      LastName: dto.LastName.trim(),
+      DisplayName,
+      Email,
+      Password: await bcrypt.hash(dto.Password, 10),
+      Active: true,
+      Roles: [UserRoles.Customer, UserRoles.AppUser],
+      RolesAllowedToRead: [UserRoles.Admin],
+      RolesAllowedToUpdate: [UserRoles.Admin],
+      RolesAllowedToWrite: [UserRoles.Admin],
+      CreatedDate: new Date().toISOString(),
+    });
+
+    return this.login({
+      Email,
+      Password: dto.Password,
+      GrantType: 'password',
+    });
   }
 
   async login(

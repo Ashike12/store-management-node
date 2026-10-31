@@ -420,6 +420,8 @@ export class ProductService {
       EndUserDiscountedPrice:
         (x as any).EndUserDiscountedPrice ?? (x as any).SellingPrice ?? 0,
       Quantity: x.Quantity,
+      AverageRating: (x as any).AverageRating ?? 0,
+      ReviewCount: (x as any).ReviewCount ?? 0,
       CreatedDate: x.CreatedDate,
     };
   }

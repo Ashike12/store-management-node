@@ -50,6 +50,12 @@ export class Product extends RootSchema {
   @Prop()
   Quantity: number;
 
+  @Prop({ default: 0, min: 0, max: 5 })
+  AverageRating: number;
+
+  @Prop({ default: 0, min: 0 })
+  ReviewCount: number;
+
   @Prop({ default: false })
   QrVerificationEnabled: boolean;
 

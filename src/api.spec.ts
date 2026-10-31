@@ -34,6 +34,8 @@ import { RedisHelperService } from './services/redis-helper.service';
 import { InventoryService } from './business/services/inventory.service';
 import { EmployeeController } from './employee/employee.controller';
 import { EmployeeService } from './employee/employee.service';
+import { ProductReviewService } from './business/services/product-review.service';
+import { ProductReviewRateLimitGuard } from './guards/product-review-rate-limit.guard';
 
 const product = {
   RequestId: 'product-create-request-1',
@@ -91,7 +93,12 @@ const order = {
     },
   ],
 };
-const user = { _id: 'admin-1', Roles: ['admin'] };
+const user = { _id: 'admin-1', DisplayName: 'Admin', Roles: ['admin'] };
+const customer = {
+  _id: 'customer-1',
+  DisplayName: 'Customer',
+  Roles: ['customer', 'appuser'],
+};
 const controllers = [
   AppController,
   AuthController,
@@ -142,6 +149,41 @@ const cases: Case[] = [
     restricted: true,
   },
   {
+    method: 'post',
+    path: '/business/UpdateOrderInfo',
+    service: OrderOperationsService,
+    call: 'updateInfo',
+    body: {
+      ItemId: 'order-1',
+      ExpectedVersion: 0,
+      CustomerName: 'Updated Customer',
+      PhoneNumber: '01700000000',
+      Division: 'Dhaka',
+      District: 'Dhaka',
+      Area: 'Savar',
+      PostCode: '1340',
+      Address: 'Updated address',
+      DeliveryNotes: 'Call before delivery',
+      DeliveryZone: 'inside_dhaka',
+      UpdateDoneBy: 'PhoneCall',
+      Note: 'Customer confirmed the missing address.',
+    },
+    restricted: true,
+    invalid: {
+      ItemId: 'order-1',
+      ExpectedVersion: 0,
+      CustomerName: '',
+      PhoneNumber: 'invalid',
+      Division: '',
+      District: '',
+      Area: '',
+      PostCode: '',
+      Address: '',
+      DeliveryZone: 'invalid',
+      UpdateDoneBy: 'SocialMedia',
+    },
+  },
+  {
     method: 'get',
     path: '/',
     service: AppService,
@@ -171,6 +213,25 @@ const cases: Case[] = [
     },
     public: true,
     invalid: {},
+  },
+  {
+    method: 'post',
+    path: '/auth/client-signup',
+    service: AuthService,
+    call: 'clientSignUp',
+    body: {
+      FirstName: 'Test',
+      LastName: 'Customer',
+      Email: 'customer@example.com',
+      Password: 'password-123',
+    },
+    public: true,
+    invalid: {
+      FirstName: '',
+      LastName: '',
+      Email: 'invalid',
+      Password: 'short',
+    },
   },
   {
     method: 'post',
@@ -296,6 +357,40 @@ const cases: Case[] = [
     args: ['valid_QR-token'],
     public: true,
     invalid: { Token: 'invalid token!' },
+  },
+  {
+    method: 'post',
+    path: '/business/ListProductReviews',
+    service: ProductReviewService,
+    call: 'list',
+    body: { ProductId: 'product-1', Page: 1, Size: 10 },
+    public: true,
+    invalid: { ProductId: '', Page: 0, Size: 51 },
+  },
+  {
+    method: 'post',
+    path: '/business/CreateProductReview',
+    service: ProductReviewService,
+    call: 'create',
+    body: {
+      ProductId: 'product-1',
+      Rating: 5,
+      Comment: 'Excellent product.',
+    },
+    token: 'customer',
+    args: [
+      {
+        ProductId: 'product-1',
+        Rating: 5,
+        Comment: 'Excellent product.',
+      },
+      customer,
+    ],
+    invalid: {
+      ProductId: 'product-1',
+      Rating: 6,
+      Comment: 'bad',
+    },
   },
   {
     method: 'post',
@@ -441,94 +536,184 @@ const cases: Case[] = [
     restricted: true,
   },
   {
-    method: 'post', path: '/employee/CreateEmployee', service: EmployeeService,
-    call: 'createEmployee', restricted: true,
-    body: { FirstName: 'Rafiq', LastName: 'Worker', Email: 'rafiq@example.com', Phone: '01700000001', Address: 'Dhaka', Password: 'strong-password' },
+    method: 'post',
+    path: '/employee/CreateEmployee',
+    service: EmployeeService,
+    call: 'createEmployee',
+    restricted: true,
+    body: {
+      FirstName: 'Rafiq',
+      LastName: 'Worker',
+      Email: 'rafiq@example.com',
+      Phone: '01700000001',
+      Address: 'Dhaka',
+      Password: 'strong-password',
+    },
     invalid: { FirstName: '', Email: 'bad' },
   },
   {
-    method: 'post', path: '/employee/ListEmployees', service: EmployeeService,
-    call: 'listEmployees', restricted: true,
-    body: { Status: 'active', Page: 1, Size: 20 }, invalid: { Page: 0, Size: 101 },
+    method: 'post',
+    path: '/employee/ListEmployees',
+    service: EmployeeService,
+    call: 'listEmployees',
+    restricted: true,
+    body: { Status: 'active', Page: 1, Size: 20 },
+    invalid: { Page: 0, Size: 101 },
   },
   {
-    method: 'post', path: '/employee/UpdateEmployee', service: EmployeeService,
-    call: 'updateEmployee', restricted: true,
-    body: { ItemId: 'employee-1', DisplayName: 'Rafiq Worker' }, invalid: { ItemId: '' },
+    method: 'post',
+    path: '/employee/UpdateEmployee',
+    service: EmployeeService,
+    call: 'updateEmployee',
+    restricted: true,
+    body: { ItemId: 'employee-1', DisplayName: 'Rafiq Worker' },
+    invalid: { ItemId: '' },
   },
   {
-    method: 'post', path: '/employee/DeactivateEmployee', service: EmployeeService,
-    call: 'deactivateEmployee', restricted: true,
-    body: { EmployeeId: 'employee-1' }, invalid: { EmployeeId: '' },
+    method: 'post',
+    path: '/employee/DeactivateEmployee',
+    service: EmployeeService,
+    call: 'deactivateEmployee',
+    restricted: true,
+    body: { EmployeeId: 'employee-1' },
+    invalid: { EmployeeId: '' },
     args: ['employee-1', user],
   },
   {
-    method: 'post', path: '/employee/GetOverview', service: EmployeeService,
-    call: 'getOverview', body: { EmployeeId: 'employee-1' }, invalid: { EmployeeId: 1 },
+    method: 'post',
+    path: '/employee/GetOverview',
+    service: EmployeeService,
+    call: 'getOverview',
+    body: { EmployeeId: 'employee-1' },
+    invalid: { EmployeeId: 1 },
     args: [{ EmployeeId: 'employee-1' }, user],
   },
   {
-    method: 'post', path: '/employee/CreateWorkEntry', service: EmployeeService,
-    call: 'createWorkEntry', restricted: true,
-    body: { EmployeeId: 'employee-1', WorkDate: '2026-10-27', Description: 'Made mosquito nets', Amount: 500 },
+    method: 'post',
+    path: '/employee/CreateWorkEntry',
+    service: EmployeeService,
+    call: 'createWorkEntry',
+    restricted: true,
+    body: {
+      EmployeeId: 'employee-1',
+      WorkDate: '2026-10-27',
+      Description: 'Made mosquito nets',
+      Amount: 500,
+    },
     invalid: { EmployeeId: '', WorkDate: '', Description: '', Amount: 0 },
   },
   {
-    method: 'post', path: '/employee/ListEmployeeBatches', service: EmployeeService,
-    call: 'listEmployeeBatches', restricted: true,
+    method: 'post',
+    path: '/employee/ListEmployeeBatches',
+    service: EmployeeService,
+    call: 'listEmployeeBatches',
+    restricted: true,
     body: { EmployeeId: 'employee-1', SearchTerm: 'net', Page: 1, Size: 20 },
     invalid: { EmployeeId: '', Page: 0, Size: 51 },
   },
   {
-    method: 'post', path: '/employee/UpdateWorkEntry', service: EmployeeService,
-    call: 'updateWorkEntry', restricted: true,
-    body: { ItemId: 'work-1', Amount: 550 }, invalid: { ItemId: '', Amount: 0 },
+    method: 'post',
+    path: '/employee/UpdateWorkEntry',
+    service: EmployeeService,
+    call: 'updateWorkEntry',
+    restricted: true,
+    body: { ItemId: 'work-1', Amount: 550 },
+    invalid: { ItemId: '', Amount: 0 },
   },
   {
-    method: 'post', path: '/employee/DeleteWorkEntry', service: EmployeeService,
-    call: 'deleteWorkEntry', restricted: true,
-    body: { ItemId: 'work-1' }, invalid: { ItemId: '' },
+    method: 'post',
+    path: '/employee/DeleteWorkEntry',
+    service: EmployeeService,
+    call: 'deleteWorkEntry',
+    restricted: true,
+    body: { ItemId: 'work-1' },
+    invalid: { ItemId: '' },
     args: ['work-1', user],
   },
   {
-    method: 'post', path: '/employee/CreatePaymentEntry', service: EmployeeService,
-    call: 'createPaymentEntry', restricted: true,
-    body: { EmployeeId: 'employee-1', PaymentDate: '2026-10-27', Amount: 300, Note: 'Cash' },
+    method: 'post',
+    path: '/employee/CreatePaymentEntry',
+    service: EmployeeService,
+    call: 'createPaymentEntry',
+    restricted: true,
+    body: {
+      EmployeeId: 'employee-1',
+      PaymentDate: '2026-10-27',
+      Amount: 300,
+      Note: 'Cash',
+    },
     invalid: { EmployeeId: '', PaymentDate: '', Amount: 0 },
   },
   {
-    method: 'post', path: '/employee/UpdatePaymentEntry', service: EmployeeService,
-    call: 'updatePaymentEntry', restricted: true,
-    body: { ItemId: 'payment-1', Amount: 350 }, invalid: { ItemId: '', Amount: 0 },
+    method: 'post',
+    path: '/employee/UpdatePaymentEntry',
+    service: EmployeeService,
+    call: 'updatePaymentEntry',
+    restricted: true,
+    body: { ItemId: 'payment-1', Amount: 350 },
+    invalid: { ItemId: '', Amount: 0 },
   },
   {
-    method: 'post', path: '/employee/DeletePaymentEntry', service: EmployeeService,
-    call: 'deletePaymentEntry', restricted: true,
-    body: { ItemId: 'payment-1' }, invalid: { ItemId: '' },
+    method: 'post',
+    path: '/employee/DeletePaymentEntry',
+    service: EmployeeService,
+    call: 'deletePaymentEntry',
+    restricted: true,
+    body: { ItemId: 'payment-1' },
+    invalid: { ItemId: '' },
     args: ['payment-1', user],
   },
   {
-    method: 'post', path: '/employee/SubmitFeedback', service: EmployeeService,
-    call: 'submitFeedback', token: 'employee',
-    body: { TargetType: 'work', TargetId: 'work-1', Explanation: 'Please review the amount' },
+    method: 'post',
+    path: '/employee/SubmitFeedback',
+    service: EmployeeService,
+    call: 'submitFeedback',
+    token: 'employee',
+    body: {
+      TargetType: 'work',
+      TargetId: 'work-1',
+      Explanation: 'Please review the amount',
+    },
     invalid: { TargetType: 'other', TargetId: '', Explanation: '' },
-    args: [{ TargetType: 'work', TargetId: 'work-1', Explanation: 'Please review the amount' }, { _id: 'employee-1', Roles: ['employee', 'appuser'] }],
+    args: [
+      {
+        TargetType: 'work',
+        TargetId: 'work-1',
+        Explanation: 'Please review the amount',
+      },
+      { _id: 'employee-1', Roles: ['employee', 'appuser'] },
+    ],
   },
   {
-    method: 'post', path: '/employee/ResolveFeedback', service: EmployeeService,
-    call: 'resolveFeedback', restricted: true,
-    body: { FeedbackId: 'feedback-1', Status: 'accepted', ResolutionNote: 'Reviewed' },
+    method: 'post',
+    path: '/employee/ResolveFeedback',
+    service: EmployeeService,
+    call: 'resolveFeedback',
+    restricted: true,
+    body: {
+      FeedbackId: 'feedback-1',
+      Status: 'accepted',
+      ResolutionNote: 'Reviewed',
+    },
     invalid: { FeedbackId: '', Status: 'pending', ResolutionNote: '' },
   },
   {
-    method: 'post', path: '/employee/ListNotifications', service: EmployeeService,
-    call: 'listNotifications', restricted: true,
-    body: { Status: 'unread', Page: 1, Size: 20 }, invalid: { Status: 'bad', Page: 0 },
+    method: 'post',
+    path: '/employee/ListNotifications',
+    service: EmployeeService,
+    call: 'listNotifications',
+    restricted: true,
+    body: { Status: 'unread', Page: 1, Size: 20 },
+    invalid: { Status: 'bad', Page: 0 },
   },
   {
-    method: 'post', path: '/employee/MarkNotificationRead', service: EmployeeService,
-    call: 'markNotificationRead', restricted: true,
-    body: { FeedbackId: 'feedback-1' }, invalid: { FeedbackId: '' },
+    method: 'post',
+    path: '/employee/MarkNotificationRead',
+    service: EmployeeService,
+    call: 'markNotificationRead',
+    restricted: true,
+    body: { FeedbackId: 'feedback-1' },
+    invalid: { FeedbackId: '' },
     args: ['feedback-1', user],
   },
   {
@@ -601,14 +786,18 @@ describe('API HTTP contracts (services mocked; no live infrastructure)', () => {
           req.user =
             req.headers.authorization === 'Bearer wholesaler'
               ? { _id: 'wholesaler-1', Roles: ['wholesaler'] }
-              : req.headers.authorization === 'Bearer employee'
-                ? { _id: 'employee-1', Roles: ['employee', 'appuser'] }
-              : req.headers.authorization === 'Bearer appuser'
-                ? { _id: 'appuser-1', Roles: ['appuser'] }
-                : user;
+              : req.headers.authorization === 'Bearer customer'
+                ? customer
+                : req.headers.authorization === 'Bearer employee'
+                  ? { _id: 'employee-1', Roles: ['employee', 'appuser'] }
+                  : req.headers.authorization === 'Bearer appuser'
+                    ? { _id: 'appuser-1', Roles: ['appuser'] }
+                    : user;
           return true;
         },
       })
+      .overrideGuard(ProductReviewRateLimitGuard)
+      .useValue({ canActivate: () => true })
       .compile();
     app = module.createNestApplication();
     app.useGlobalPipes(new ValidationPipe());
@@ -683,9 +872,11 @@ describe('API HTTP contracts (services mocked; no live infrastructure)', () => {
   for (const c of cases) {
     describe(`${c.method.toUpperCase()} ${c.path}`, () => {
       it('routes a valid request to the expected service', async () => {
-        const result = await send(c, c.body, c.public ? '' : (c.token ?? 'admin')).expect(
-          200,
-        );
+        const result = await send(
+          c,
+          c.body,
+          c.public ? '' : (c.token ?? 'admin'),
+        ).expect(200);
         const mock = mocks.get(c.service)[c.call];
         expect(mock).toHaveBeenCalledTimes(1);
         if (c.args) expect(mock).toHaveBeenCalledWith(...c.args);
@@ -792,15 +983,12 @@ describe('API HTTP contracts (services mocked; no live infrastructure)', () => {
     'CreateClientOrder',
     'QuoteBuilder',
     'VerifyProductQr',
-  ])(
-    'rate-limits %s',
-    async (route) => {
-      redis.incrementWithExpiryInSecond.mockResolvedValue(31);
-      const c = cases.find((c) => c.path === `/business/${route}`);
-      await send(c, c.body, '').expect(429);
-      expect(mocks.get(c.service)[c.call]).not.toHaveBeenCalled();
-    },
-  );
+  ])('rate-limits %s', async (route) => {
+    redis.incrementWithExpiryInSecond.mockResolvedValue(31);
+    const c = cases.find((c) => c.path === `/business/${route}`);
+    await send(c, c.body, '').expect(429);
+    expect(mocks.get(c.service)[c.call]).not.toHaveBeenCalled();
+  });
   it('rejects client prices on the quote request', async () => {
     await request(app.getHttpServer())
       .post('/business/QuoteBuilder')

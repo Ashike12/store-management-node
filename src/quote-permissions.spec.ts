@@ -41,7 +41,7 @@ describe('BE-102 permission seed', () => {
 });
 
 describe('BE-104 admin-only permission seeds', () => {
-  it('upserts three endpoints into both maps, admin only, plus request-id index', async () => {
+  it('upserts four endpoints into both maps, admin only, plus request-id index', async () => {
     const {
       seedOrderOperations: seed,
     } = require('../scripts/seed-order-operations.cjs');
@@ -57,7 +57,7 @@ describe('BE-104 admin-only permission seeds', () => {
     };
     await seed(db);
     await seed(db);
-    expect(rows.size).toBe(6);
+    expect(rows.size).toBe(8);
     for (const row of rows.values()) expect(row.RoleName).toBe('admin');
     expect(index).toHaveBeenCalledWith(
       { RequestId: 1 },

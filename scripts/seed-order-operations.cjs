@@ -1,18 +1,21 @@
 const roles = ['admin'];
 
 async function seedOrderOperations(db) {
-  for (const FeatureId of ['ListOrders', 'GetOrder', 'TransitionOrder']) {
+  for (const FeatureId of [
+    'ListOrders',
+    'GetOrder',
+    'TransitionOrder',
+    'UpdateOrderInfo',
+  ]) {
     const common = { FeatureId, FeatureName: FeatureId, RoleName: 'admin' };
-    await db
-      .collection('featureendpointmaps')
-      .updateOne(
-        { APIToAccess: 'business/' + FeatureId, RoleName: 'admin' },
-        {
-          $set: { ...common, APIToAccess: 'business/' + FeatureId },
-          $setOnInsert: { _id: 'be-104-endpoint-' + FeatureId },
-        },
-        { upsert: true },
-      );
+    await db.collection('featureendpointmaps').updateOne(
+      { APIToAccess: 'business/' + FeatureId, RoleName: 'admin' },
+      {
+        $set: { ...common, APIToAccess: 'business/' + FeatureId },
+        $setOnInsert: { _id: 'be-104-endpoint-' + FeatureId },
+      },
+      { upsert: true },
+    );
     await db
       .collection('featurerolemaps')
       .updateOne(
@@ -21,15 +24,13 @@ async function seedOrderOperations(db) {
         { upsert: true },
       );
   }
-  await db
-    .collection('orders')
-    .createIndex(
-      { RequestId: 1 },
-      {
-        unique: true,
-        partialFilterExpression: { RequestId: { $type: 'string' } },
-      },
-    );
+  await db.collection('orders').createIndex(
+    { RequestId: 1 },
+    {
+      unique: true,
+      partialFilterExpression: { RequestId: { $type: 'string' } },
+    },
+  );
   await db.collection('orders').createIndex({ CreatedDate: -1, _id: -1 });
   await db
     .collection('orders')
