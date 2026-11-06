@@ -56,6 +56,7 @@ import {
 } from './dto/product/product-review.dto';
 import { ProductReviewService } from './services/product-review.service';
 import { ProductReviewRateLimitGuard } from '../guards/product-review-rate-limit.guard';
+import { GetSalesHistoryDto } from './dto/product-sell/sales-history.dto';
 
 @Controller('business')
 export class BusinessController {
@@ -361,6 +362,34 @@ export class BusinessController {
     const user = req['user'] as User;
     this.ensureInvoiceReadAccess(user);
     return this.invoiceService.getDashboardStatsData(user);
+  }
+
+  @Post('ListSalesUsers')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  ListSalesUsers(@Req() req: Request): Promise<QueryRespone> {
+    const user = req['user'] as User;
+    this.ensureAdmin(user);
+    return this.invoiceService.listSalesUsers(user);
+  }
+
+  @Post('GetSalesHistory')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
+  GetSalesHistory(
+    @Body() dto: GetSalesHistoryDto,
+    @Req() req: Request,
+  ): Promise<QueryRespone> {
+    const user = req['user'] as User;
+    this.ensureAdmin(user);
+    return this.invoiceService.getSalesHistory(dto, user);
   }
 
   @Post('AddProduction')

@@ -245,6 +245,8 @@ describe('InvoiceService access, validation and reporting', () => {
           RealizedCashMargin: 100,
           InvoiceType: 'DUE_PAYMENT',
           WholeSalerId: 'owner',
+          SoldByUserId: 'admin',
+          SoldByUserName: 'Unknown seller',
         }),
       ],
       { session },
@@ -253,6 +255,144 @@ describe('InvoiceService access, validation and reporting', () => {
     expect(products.updateOne).not.toHaveBeenCalled();
     expect(session.endSession).toHaveBeenCalledTimes(1);
   });
+
+  it('accepts an active manager as the selected seller and stores a name snapshot', async () => {
+    users.findOne
+      .mockReturnValueOnce(
+        sessionResult({
+          _id: 'owner',
+          FirstName: 'Test',
+          LastName: 'User',
+          DisplayName: 'Test User',
+          Roles: ['wholesaler'],
+        }),
+      )
+      .mockReturnValueOnce(
+        sessionResult({
+          _id: 'manager-1',
+          DisplayName: 'Sales Manager',
+          Active: true,
+          Roles: ['manager'],
+        }),
+      );
+
+    await service.createInvoice(
+      { ...due, SoldByUserId: 'manager-1' },
+      admin,
+    );
+
+    expect(invoices.create).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          SoldByUserId: 'manager-1',
+          SoldByUserName: 'Sales Manager',
+        }),
+      ],
+      { session },
+    );
+  });
+
+  it('rejects a selected seller who is not an active admin or manager', async () => {
+    users.findOne
+      .mockReturnValueOnce(
+        sessionResult({
+          _id: 'owner',
+          DisplayName: 'Test User',
+          Roles: ['wholesaler'],
+        }),
+      )
+      .mockReturnValueOnce(sessionResult(null));
+
+    await expect(
+      service.createInvoice({ ...due, SoldByUserId: 'customer-1' }, admin),
+    ).rejects.toThrow('active admin or manager');
+    expect(invoices.create).not.toHaveBeenCalled();
+  });
+
+  it('reports product sales only and applies seller and Dhaka period filters', async () => {
+    invoiceQuery.skip.mockResolvedValueOnce([
+      {
+        _id: 'invoice-2',
+        InvoiceNumber: 'AB-2',
+        InvoiceType: 'WHOLESALE',
+        CreatedDate: '2026-11-06T03:00:00.000Z',
+        WholeSalerName: 'Partner',
+        SoldByUserId: 'manager-1',
+        SoldByUserName: 'Sales Manager',
+        TotalAmount: 500,
+        PaymentAmount: 300,
+        GrossProfit: 120,
+      },
+    ]);
+    invoices.aggregate
+      .mockResolvedValueOnce([
+        {
+          InvoiceCount: 1,
+          TotalSales: 500,
+          TotalReceived: 300,
+          OutstandingDue: 200,
+          GrossProfit: 120,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          _id: { id: 'manager-1', name: 'Sales Manager' },
+          InvoiceCount: 1,
+          TotalSales: 500,
+          TotalReceived: 300,
+        },
+      ])
+      .mockResolvedValueOnce([
+        { _id: '2026-11-06', InvoiceCount: 1, TotalSales: 500 },
+      ]);
+
+    const result = await service.getSalesHistory(
+      {
+        Period: 'daily',
+        SoldByUserId: 'manager-1',
+        Page: 1,
+        Size: 10,
+      },
+      admin,
+    );
+
+    expect(invoices.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        InvoiceType: { $in: ['WHOLESALE', 'CONSUMER'] },
+        SoldByUserId: 'manager-1',
+        CreatedDate: {
+          $gte: expect.any(String),
+          $lt: expect.any(String),
+        },
+      }),
+    );
+    expect(result.Data[0]).toMatchObject({
+      SoldByUserName: 'Sales Manager',
+      DueAmount: 200,
+    });
+    expect(result.Summary).toMatchObject({
+      InvoiceCount: 1,
+      TotalSales: 500,
+      OutstandingDue: 200,
+    });
+  });
+
+  it.each([
+    ['daily', '2026-11-05T18:00:00.000Z'],
+    ['last7Days', '2026-10-30T18:00:00.000Z'],
+    ['last30Days', '2026-10-07T18:00:00.000Z'],
+    ['currentMonth', '2026-10-31T18:00:00.000Z'],
+  ])(
+    'uses Bangladesh calendar boundaries for %s',
+    (period, expectedStart) => {
+      const bounds = (service as any).getSalesPeriodBounds(
+        period,
+        new Date('2026-11-06T10:00:00.000Z'),
+      );
+      expect(bounds.start.toISOString()).toBe(expectedStart);
+      expect(bounds.end.toISOString()).toBe('2026-11-06T18:00:00.000Z');
+    },
+  );
 
   it('rejects users without the wholesaler role as invoice owners', async () => {
     users.findOne.mockReturnValue(

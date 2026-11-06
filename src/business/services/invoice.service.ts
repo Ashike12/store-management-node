@@ -21,6 +21,10 @@ import { INVOICE_CONSTANT } from '../../shared/constant/invoice.constant';
 import { startOfMonth, addMonths } from 'date-fns';
 import { UserRoles } from '../../shared/constant/roles.constant';
 import { ORDER_LIMITS } from '../../shared/constant/order-validation.constant';
+import {
+  GetSalesHistoryDto,
+  SalesPeriod,
+} from '../dto/product-sell/sales-history.dto';
 
 type InvoiceFinancialSummary = {
   TotalBilled: number;
@@ -32,6 +36,8 @@ type InvoiceFinancialSummary = {
   CustomerCredit: number;
   CostAtRisk: number;
 };
+
+const DHAKA_UTC_OFFSET_MS = 6 * 60 * 60 * 1000;
 
 @Injectable()
 export class InvoiceService {
@@ -61,6 +67,52 @@ export class InvoiceService {
     if (!this.isAdminUser(user)) {
       throw new ForbiddenException('Admin access required');
     }
+  }
+
+  private isSalesUser(user?: User | null): boolean {
+    return !!user?.Roles?.some(
+      (role) => role === UserRoles.Admin || role === UserRoles.Manager,
+    );
+  }
+
+  private getUserDisplayName(user: User): string {
+    return (
+      user.DisplayName ||
+      [user.FirstName, user.LastName].filter(Boolean).join(' ') ||
+      user.Email ||
+      'Unknown seller'
+    );
+  }
+
+  private async resolveSalesUser(
+    requestedUserId: string | undefined,
+    loggedInUser: User,
+    session?: mongoose.ClientSession,
+  ): Promise<{ id: string; name: string }> {
+    const sellerId = requestedUserId || String(loggedInUser._id || '');
+    if (!sellerId) {
+      throw new BadRequestException('Sold by user is required');
+    }
+
+    if (
+      sellerId === String(loggedInUser._id) &&
+      this.isSalesUser(loggedInUser)
+    ) {
+      return { id: sellerId, name: this.getUserDisplayName(loggedInUser) };
+    }
+
+    const query = this.userModel.findOne({
+      _id: sellerId,
+      Active: { $ne: false },
+      Roles: { $in: [UserRoles.Admin, UserRoles.Manager] },
+    });
+    const seller = session ? await query.session(session) : await query;
+    if (!seller) {
+      throw new BadRequestException(
+        'Selected seller must be an active admin or manager',
+      );
+    }
+    return { id: String(seller._id), name: this.getUserDisplayName(seller) };
   }
 
   private authorizeInvoiceRead(user?: User | null): void {
@@ -158,6 +210,11 @@ export class InvoiceService {
     return this.runInTransaction(async (session) => {
       const response = new CommandResponse();
       const wholesalerInfo = await this.resolveWholesaler(dto, session);
+      const salesUser = await this.resolveSalesUser(
+        dto.SoldByUserId,
+        loggedInUser!,
+        session,
+      );
       const invoiceId = this.sharedService.getUid();
       const prepared = await this.prepareProductSells(
         dto,
@@ -185,6 +242,8 @@ export class InvoiceService {
         RealizedCashMargin: dto.PaymentAmount - prepared.totalCostAmount,
         WholeSalerId: dto.WholeSalerId || '',
         WholeSalerName: wholesalerInfo?.DisplayName ?? '',
+        SoldByUserId: salesUser.id,
+        SoldByUserName: salesUser.name,
         InvoiceType: dto.InvoiceType,
         InvoiceNumber: `${invoiceNumberPrefix}-${new Date().getTime()}-${invoiceId.slice(-8)}`,
         IdsAllowedToRead: dto.WholeSalerId ? [dto.WholeSalerId] : [],
@@ -254,6 +313,8 @@ export class InvoiceService {
             InvoiceType:
               normalizedInvoice.InvoiceType ?? INVOICE_CONSTANT.WHOLESALE,
             WholeSalerName: normalizedInvoice.WholeSalerName,
+            SoldByUserId: normalizedInvoice.SoldByUserId || '',
+            SoldByUserName: normalizedInvoice.SoldByUserName || 'Not recorded',
             CreatedDate: normalizedInvoice.CreatedDate,
           },
           loggedInUser,
@@ -350,6 +411,20 @@ export class InvoiceService {
       }
 
       const wholesalerInfo = await this.resolveWholesaler(dto, session);
+      const salesUser = dto.SoldByUserId
+        ? await this.resolveSalesUser(
+            dto.SoldByUserId,
+            loggedInUser!,
+            session,
+          )
+        : {
+            id:
+              existingData.SoldByUserId ||
+              String(loggedInUser?._id || ''),
+            name:
+              existingData.SoldByUserName ||
+              this.getUserDisplayName(loggedInUser!),
+          };
       await this.restoreProductSells(dto.ItemId, session);
       await this.productSellModel.deleteMany(
         { InvoiceId: dto.ItemId },
@@ -387,6 +462,8 @@ export class InvoiceService {
             InvoiceType: dto.InvoiceType,
             WholeSalerId: dto.WholeSalerId || '',
             WholeSalerName: wholesalerInfo?.DisplayName ?? '',
+            SoldByUserId: salesUser.id,
+            SoldByUserName: salesUser.name,
             IdsAllowedToRead: dto.WholeSalerId ? [dto.WholeSalerId] : [],
           },
         },
@@ -641,6 +718,173 @@ export class InvoiceService {
     } finally {
       await session.endSession();
     }
+  }
+
+  public async listSalesUsers(loggedInUser?: User): Promise<QueryRespone> {
+    this.authorizeAdmin(loggedInUser);
+    const response = new QueryRespone();
+    const users = await this.userModel
+      .find({
+        Active: { $ne: false },
+        Roles: { $in: [UserRoles.Admin, UserRoles.Manager] },
+      })
+      .sort({ DisplayName: 1, FirstName: 1, LastName: 1 });
+    const data = users.map((user) => ({
+      ItemId: String(user._id),
+      DisplayName: this.getUserDisplayName(user),
+      Email: user.Email || '',
+      Roles: (user.Roles || []).filter(
+        (role) => role === UserRoles.Admin || role === UserRoles.Manager,
+      ),
+    }));
+    response.setData(data, data.length);
+    return response;
+  }
+
+  public async getSalesHistory(
+    dto: GetSalesHistoryDto,
+    loggedInUser?: User,
+  ): Promise<QueryRespone> {
+    this.authorizeAdmin(loggedInUser);
+    const response = new QueryRespone();
+    const { start, end } = this.getSalesPeriodBounds(dto.Period);
+    const filter: Record<string, any> = {
+      InvoiceType: {
+        $in: [INVOICE_CONSTANT.WHOLESALE, INVOICE_CONSTANT.CONSUMER],
+      },
+      CreatedDate: { $gte: start.toISOString(), $lt: end.toISOString() },
+    };
+    if (dto.SoldByUserId) filter.SoldByUserId = dto.SoldByUserId;
+
+    const page = dto.Page || 1;
+    const size = dto.Size || 10;
+    const skip = (page - 1) * size;
+    const [documents, totalCount, summaryRows, sellerBreakdown, dailyTrend] =
+      await Promise.all([
+        this.invoiceModel
+          .find(filter)
+          .sort({ CreatedDate: -1, _id: -1 })
+          .limit(size)
+          .skip(skip),
+        this.invoiceModel.countDocuments(filter),
+        this.invoiceModel.aggregate([
+          { $match: filter },
+          {
+            $group: {
+              _id: null,
+              InvoiceCount: { $sum: 1 },
+              TotalSales: { $sum: '$TotalAmount' },
+              TotalReceived: { $sum: '$PaymentAmount' },
+              OutstandingDue: {
+                $sum: {
+                  $max: [
+                    { $subtract: ['$TotalAmount', '$PaymentAmount'] },
+                    0,
+                  ],
+                },
+              },
+              GrossProfit: { $sum: '$GrossProfit' },
+            },
+          },
+        ]),
+        this.invoiceModel.aggregate([
+          { $match: filter },
+          {
+            $group: {
+              _id: { id: '$SoldByUserId', name: '$SoldByUserName' },
+              InvoiceCount: { $sum: 1 },
+              TotalSales: { $sum: '$TotalAmount' },
+              TotalReceived: { $sum: '$PaymentAmount' },
+            },
+          },
+          { $sort: { TotalSales: -1 } },
+        ]),
+        this.invoiceModel.aggregate([
+          { $match: filter },
+          {
+            $group: {
+              _id: {
+                $dateToString: {
+                  format: '%Y-%m-%d',
+                  date: { $toDate: '$CreatedDate' },
+                  timezone: '+06:00',
+                },
+              },
+              InvoiceCount: { $sum: 1 },
+              TotalSales: { $sum: '$TotalAmount' },
+            },
+          },
+          { $sort: { _id: 1 } },
+        ]),
+      ]);
+
+    const summary = summaryRows[0] || {
+      InvoiceCount: 0,
+      TotalSales: 0,
+      TotalReceived: 0,
+      OutstandingDue: 0,
+      GrossProfit: 0,
+    };
+    response.setData(
+      documents.map((invoice) => ({
+        ItemId: invoice._id,
+        InvoiceNumber: invoice.InvoiceNumber,
+        CreatedDate: invoice.CreatedDate,
+        InvoiceType: invoice.InvoiceType,
+        WholeSalerName: invoice.WholeSalerName || 'Consumer',
+        SoldByUserId: invoice.SoldByUserId || '',
+        SoldByUserName: invoice.SoldByUserName || 'Not recorded',
+        TotalAmount: invoice.TotalAmount,
+        PaymentAmount: invoice.PaymentAmount,
+        DueAmount: Math.max(
+          0,
+          (invoice.TotalAmount || 0) - (invoice.PaymentAmount || 0),
+        ),
+        GrossProfit: invoice.GrossProfit,
+      })),
+      totalCount,
+    );
+    response.Summary = {
+      Period: dto.Period,
+      StartDate: start.toISOString(),
+      EndDateExclusive: end.toISOString(),
+      InvoiceCount: summary.InvoiceCount,
+      TotalSales: summary.TotalSales,
+      TotalReceived: summary.TotalReceived,
+      OutstandingDue: summary.OutstandingDue || 0,
+      GrossProfit: summary.GrossProfit,
+      SalesByPerson: sellerBreakdown.map((row) => ({
+        SoldByUserId: row._id?.id || '',
+        SoldByUserName: row._id?.name || 'Not recorded',
+        InvoiceCount: row.InvoiceCount,
+        TotalSales: row.TotalSales,
+        TotalReceived: row.TotalReceived,
+      })),
+      DailyTrend: dailyTrend.map((row) => ({
+        Date: row._id,
+        InvoiceCount: row.InvoiceCount,
+        TotalSales: row.TotalSales,
+      })),
+    };
+    return response;
+  }
+
+  private getSalesPeriodBounds(period: SalesPeriod, now = new Date()) {
+    const dhakaNow = new Date(now.getTime() + DHAKA_UTC_OFFSET_MS);
+    const year = dhakaNow.getUTCFullYear();
+    const month = dhakaNow.getUTCMonth();
+    const day = dhakaNow.getUTCDate();
+    const dayOffset =
+      period === 'last7Days' ? 6 : period === 'last30Days' ? 29 : 0;
+    const startLocalUtc =
+      period === 'currentMonth'
+        ? Date.UTC(year, month, 1)
+        : Date.UTC(year, month, day - dayOffset);
+    const endLocalUtc = Date.UTC(year, month, day + 1);
+    return {
+      start: new Date(startLocalUtc - DHAKA_UTC_OFFSET_MS),
+      end: new Date(endLocalUtc - DHAKA_UTC_OFFSET_MS),
+    };
   }
 
   public async getDashboardStatsData(

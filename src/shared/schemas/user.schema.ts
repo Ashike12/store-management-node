@@ -24,6 +24,12 @@ export class User extends RootSchema {
   Password: string;
 
   @Prop()
+  GoogleSubject: string;
+
+  @Prop({ type: [String], default: [] })
+  AuthProviders: string[];
+
+  @Prop()
   ActivationId: string;
 
   @Prop()

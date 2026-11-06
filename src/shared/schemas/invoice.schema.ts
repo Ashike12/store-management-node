@@ -12,6 +12,12 @@ export class Invoice extends RootSchema {
   WholeSalerName: string;
 
   @Prop({ required: true })
+  SoldByUserId: string;
+
+  @Prop({ required: true })
+  SoldByUserName: string;
+
+  @Prop({ required: true })
   InvoiceNumber: string;
 
   @Prop({ required: true, min: 0 })
@@ -39,3 +45,5 @@ export class Invoice extends RootSchema {
 export const InvoiceSchema = SchemaFactory.createForClass(Invoice);
 InvoiceSchema.index({ InvoiceNumber: 1 }, { unique: true });
 InvoiceSchema.index({ WholeSalerId: 1, CreatedDate: -1, _id: -1 });
+InvoiceSchema.index({ SoldByUserId: 1, CreatedDate: -1, _id: -1 });
+InvoiceSchema.index({ InvoiceType: 1, CreatedDate: -1, _id: -1 });

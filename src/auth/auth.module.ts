@@ -11,6 +11,7 @@ import { SharedService } from '../services/shared.service';
 import { RedisHelperService } from '../services/redis-helper.service';
 import { FeatureEndpointMapSchema } from '../shared/schemas/FeatureEndpointMap.schema';
 import { UserLoginLogSchema } from '../shared/schemas/userloginlog.schema';
+import { GoogleIdentityService } from './google-identity.service';
 
 @Module({
   imports: [
@@ -33,7 +34,13 @@ import { UserLoginLogSchema } from '../shared/schemas/userloginlog.schema';
     ]),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, SharedService, RedisHelperService],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    SharedService,
+    RedisHelperService,
+    GoogleIdentityService,
+  ],
   exports: [JwtStrategy, PassportModule, RedisHelperService],
 })
 export class AuthModule {}
