@@ -23,6 +23,7 @@ import { Request } from 'express';
 import { User } from '../shared/schemas/user.schema';
 import { ClientSignUpDto } from './dto/client-signup.dto';
 import { RateLimitGuard } from '../guards/rate-limit.guard';
+import { ClientGoogleAuthDto } from './dto/client-google-auth.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -48,6 +49,22 @@ export class AuthController {
     @Body() dto: ClientSignUpDto,
   ): Promise<{ login_token: string; refresh_token: string }> {
     return this.authService.clientSignUp(dto);
+  }
+
+  @Post('/client-google')
+  @HttpCode(200)
+  @UseGuards(RateLimitGuard(60, 10))
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
+  clientGoogleAuth(
+    @Body() dto: ClientGoogleAuthDto,
+  ): Promise<{ login_token: string; refresh_token: string }> {
+    return this.authService.clientGoogleAuth(dto);
   }
 
   @Post('/token')

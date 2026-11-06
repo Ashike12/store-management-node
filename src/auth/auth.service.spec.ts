@@ -17,6 +17,9 @@ describe('AuthService', () => {
     setWithExpiryInSecond: jest.fn(),
     del: jest.fn(),
   };
+  const googleIdentity = {
+    verifyCredential: jest.fn(),
+  };
   const user = {
     _id: 'user-1',
     DisplayName: 'Test User',
@@ -40,6 +43,7 @@ describe('AuthService', () => {
       logs as any,
       { getUid: () => 'test-uid' } as any,
       redis as any,
+      googleIdentity as any,
     );
   });
   it('issues tokens and stores refresh metadata without the password', async () => {
@@ -158,5 +162,87 @@ describe('AuthService', () => {
         Active: true,
       }),
     );
+  });
+
+  it('creates a customer from a verified Google identity', async () => {
+    const googleCustomer = {
+      ...user,
+      DisplayName: 'Google Customer',
+      Email: 'google@example.com',
+      Roles: ['customer', 'appuser'],
+      GoogleSubject: 'google-subject',
+      AuthProviders: ['google'],
+    };
+    googleIdentity.verifyCredential.mockResolvedValue({
+      subject: 'google-subject',
+      email: 'google@example.com',
+      firstName: 'Google',
+      lastName: 'Customer',
+      displayName: 'Google Customer',
+    });
+    users.findOne.mockResolvedValue(null);
+    users.create.mockResolvedValue(googleCustomer);
+
+    await expect(
+      service.clientGoogleAuth({ Credential: 'id-token' }),
+    ).resolves.toEqual({
+      login_token: 'signed-test-token',
+      refresh_token: 'test-uid',
+    });
+    expect(users.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Email: 'google@example.com',
+        GoogleSubject: 'google-subject',
+        AuthProviders: ['google'],
+        Roles: ['customer', 'appuser'],
+      }),
+    );
+    expect(jwt.sign).toHaveBeenCalledWith(
+      expect.objectContaining({ UserId: 'user-1', Roles: ['customer', 'appuser'] }),
+    );
+  });
+
+  it('links Google to an existing active customer account', async () => {
+    const customer = {
+      ...user,
+      Roles: ['customer', 'appuser'],
+      AuthProviders: [],
+    };
+    const linkedCustomer = {
+      ...customer,
+      GoogleSubject: 'google-subject',
+      AuthProviders: ['google'],
+    };
+    googleIdentity.verifyCredential.mockResolvedValue({
+      subject: 'google-subject',
+      email: user.Email,
+      firstName: 'Test',
+      lastName: 'User',
+      displayName: 'Test User',
+    });
+    users.findOne.mockResolvedValue(customer);
+    users.findByIdAndUpdate.mockResolvedValue(linkedCustomer);
+
+    await service.clientGoogleAuth({ Credential: 'id-token' });
+
+    expect(users.findByIdAndUpdate).toHaveBeenCalledWith(
+      user._id,
+      expect.objectContaining({ GoogleSubject: 'google-subject' }),
+      { new: true, runValidators: true },
+    );
+    expect(users.create).not.toHaveBeenCalled();
+  });
+
+  it('does not link a Google identity to a non-customer account', async () => {
+    googleIdentity.verifyCredential.mockResolvedValue({
+      subject: 'google-subject',
+      email: user.Email,
+    });
+    users.findOne.mockResolvedValue(user);
+
+    await expect(
+      service.clientGoogleAuth({ Credential: 'id-token' }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(jwt.sign).not.toHaveBeenCalled();
   });
 });

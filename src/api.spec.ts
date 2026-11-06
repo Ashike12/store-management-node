@@ -235,6 +235,15 @@ const cases: Case[] = [
   },
   {
     method: 'post',
+    path: '/auth/client-google',
+    service: AuthService,
+    call: 'clientGoogleAuth',
+    body: { Credential: 'google-id-token' },
+    public: true,
+    invalid: { Credential: '' },
+  },
+  {
+    method: 'post',
     path: '/auth/refresh',
     service: AuthService,
     call: 'refresh',
@@ -492,6 +501,24 @@ const cases: Case[] = [
     service: InvoiceService,
     call: 'getDashboardStatsData',
     args: [user],
+  },
+  {
+    method: 'post',
+    path: '/business/ListSalesUsers',
+    service: InvoiceService,
+    call: 'listSalesUsers',
+    args: [user],
+    restricted: true,
+  },
+  {
+    method: 'post',
+    path: '/business/GetSalesHistory',
+    service: InvoiceService,
+    call: 'getSalesHistory',
+    body: { Period: 'daily', Page: 1, Size: 10 },
+    invalid: { Period: 'yearly', Page: 0 },
+    args: [{ Period: 'daily', Page: 1, Size: 10 }, user],
+    restricted: true,
   },
   {
     method: 'post',
@@ -944,7 +971,6 @@ describe('API HTTP contracts (services mocked; no live infrastructure)', () => {
     expect(mocks.get(c.service)[c.call]).not.toHaveBeenCalled();
   });
   it.each([
-    { ...invoice, PaymentAmount: '100' },
     { ...invoice, PaymentAmount: -1 },
     { ...invoice, UnexpectedField: true },
     {
@@ -955,14 +981,6 @@ describe('API HTTP contracts (services mocked; no live infrastructure)', () => {
         { ProductId: 'product-1', SellingPrice: 100, Quantity: 0 },
       ],
     },
-    {
-      PaymentAmount: 100,
-      InvoiceType: 'WHOLESALE',
-      WholeSalerId: 'wholesaler-1',
-      ProductSellInfo: [
-        { ProductId: 'product-1', SellingPrice: '100', Quantity: 1 },
-      ],
-    },
   ])(
     'rejects malformed invoice numbers before service execution',
     async (body) => {
@@ -971,6 +989,27 @@ describe('API HTTP contracts (services mocked; no live infrastructure)', () => {
       expect(mocks.get(InvoiceService).createInvoice).not.toHaveBeenCalled();
     },
   );
+  it('transforms browser invoice number strings before service execution', async () => {
+    const c = cases.find((item) => item.path === '/business/CreateInvoice');
+    await send(c, {
+      PaymentAmount: '650',
+      InvoiceType: 'CONSUMER',
+      WholeSalerId: '',
+      SoldByUserId: 'admin-1',
+      ProductSellInfo: [
+        { ProductId: 'product-1', SellingPrice: '650', Quantity: '1' },
+      ],
+    }).expect(200);
+    expect(mocks.get(InvoiceService).createInvoice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        PaymentAmount: 650,
+        ProductSellInfo: [
+          expect.objectContaining({ SellingPrice: 650, Quantity: 1 }),
+        ],
+      }),
+      user,
+    );
+  });
   it('rejects an unknown token grant', async () => {
     await request(app.getHttpServer())
       .post('/auth/token')

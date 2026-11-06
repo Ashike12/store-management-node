@@ -1,6 +1,9 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { ConflictException } from '@nestjs/common';
 import { Model } from 'mongoose';
 
 import * as bcrypt from 'bcryptjs';
@@ -20,6 +23,8 @@ import { GetLoginLogResponseDto } from './dto/getloginlog.response.dto';
 import { QueryRespone } from '../shared/response/query.response';
 import { GetLoginLogsDto } from './dto/getloginlog.dto';
 import { ClientSignUpDto } from './dto/client-signup.dto';
+import { ClientGoogleAuthDto } from './dto/client-google-auth.dto';
+import { GoogleIdentityService } from './google-identity.service';
 
 @Injectable()
 export class AuthService {
@@ -31,6 +36,7 @@ export class AuthService {
     private UserLoginLogModel: Model<UserLoginLog>,
     private sharedService: SharedService,
     private redisClient: RedisHelperService,
+    private googleIdentity: GoogleIdentityService,
   ) {}
 
   async signUp(signUpDto: SignUpDto): Promise<boolean> {
@@ -82,6 +88,7 @@ export class AuthService {
       DisplayName,
       Email,
       Password: await bcrypt.hash(dto.Password, 10),
+      AuthProviders: ['password'],
       Active: true,
       Roles: [UserRoles.Customer, UserRoles.AppUser],
       RolesAllowedToRead: [UserRoles.Admin],
@@ -95,6 +102,76 @@ export class AuthService {
       Password: dto.Password,
       GrantType: 'password',
     });
+  }
+
+  async clientGoogleAuth(
+    dto: ClientGoogleAuthDto,
+  ): Promise<{ login_token: string; refresh_token: string }> {
+    const identity = await this.googleIdentity.verifyCredential(dto.Credential);
+    let user = await this.userModel.findOne({ Email: identity.email });
+
+    if (user) {
+      if (!user.Roles.includes(UserRoles.Customer)) {
+        throw new ConflictException(
+          'This email belongs to a non-customer account',
+        );
+      }
+      if (!user.Active) {
+        throw new UnauthorizedException('Inactive Customer');
+      }
+      if (user.GoogleSubject && user.GoogleSubject !== identity.subject) {
+        throw new UnauthorizedException('Google account could not be verified');
+      }
+
+      if (
+        user.GoogleSubject !== identity.subject ||
+        !user.AuthProviders?.includes('google')
+      ) {
+        const updatedUser = await this.userModel.findByIdAndUpdate(
+          user._id,
+          {
+            GoogleSubject: identity.subject,
+            AuthProviders: Array.from(
+              new Set([
+                ...(user.AuthProviders?.length
+                  ? user.AuthProviders
+                  : user.Password
+                    ? ['password']
+                    : []),
+                'google',
+              ]),
+            ),
+          },
+          { new: true, runValidators: true },
+        );
+        if (!updatedUser) {
+          throw new UnauthorizedException('Customer account no longer exists');
+        }
+        user = updatedUser;
+      }
+    } else {
+      user = await this.userModel.create({
+        _id: this.sharedService.getUid(),
+        FirstName: identity.firstName,
+        LastName: identity.lastName,
+        DisplayName: identity.displayName,
+        Email: identity.email,
+        Password: await bcrypt.hash(
+          `${this.sharedService.getUid()}:${identity.subject}`,
+          10,
+        ),
+        GoogleSubject: identity.subject,
+        AuthProviders: ['google'],
+        Active: true,
+        Roles: [UserRoles.Customer, UserRoles.AppUser],
+        RolesAllowedToRead: [UserRoles.Admin],
+        RolesAllowedToUpdate: [UserRoles.Admin],
+        RolesAllowedToWrite: [UserRoles.Admin],
+        CreatedDate: new Date().toISOString(),
+      });
+    }
+
+    return this.issueTokens(user);
   }
 
   async login(
@@ -119,6 +196,12 @@ export class AuthService {
     if (!isPasswordMatched) {
       throw new UnauthorizedException('password not matched');
     }
+    return this.issueTokens(user);
+  }
+
+  private async issueTokens(
+    user: User,
+  ): Promise<{ login_token: string; refresh_token: string }> {
     const tokenMetaData: TokenInfo = {
       UserId: user._id,
       UserName: user.DisplayName,

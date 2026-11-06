@@ -3,6 +3,7 @@ export const UserRoles = {
   Customer: 'customer',
   AppUser: 'appuser',
   Admin: 'admin',
+  Manager: 'manager',
   WholeSaler: 'wholesaler',
   Employee: 'employee',
 };

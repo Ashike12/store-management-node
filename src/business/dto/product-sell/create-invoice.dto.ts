@@ -15,6 +15,11 @@ import {
 import { INVOICE_CONSTANT } from '../../../shared/constant/invoice.constant';
 import { ORDER_LIMITS } from '../../../shared/constant/order-validation.constant';
 export class CreateInvoiceDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  readonly SoldByUserId?: string;
+
   @IsArray()
   @ArrayMaxSize(ORDER_LIMITS.items)
   @ValidateNested({ each: true })
@@ -22,6 +27,7 @@ export class CreateInvoiceDto {
   readonly ProductSellInfo: ProductSellDto[] = [];
 
   @IsNumber({ allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 })
+  @Type(() => Number)
   @Min(0)
   @Max(ORDER_LIMITS.items * ORDER_LIMITS.quantity * ORDER_LIMITS.unitPrice)
   readonly PaymentAmount: number;
@@ -47,11 +53,13 @@ export class ProductSellDto {
   readonly ProductId: string;
 
   @IsNumber({ allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 })
+  @Type(() => Number)
   @Min(0)
   @Max(ORDER_LIMITS.unitPrice)
   readonly SellingPrice: number;
 
   @IsNumber({ allowInfinity: false, allowNaN: false, maxDecimalPlaces: 6 })
+  @Type(() => Number)
   @Min(0.000001)
   @Max(ORDER_LIMITS.quantity)
   readonly Quantity: number;
