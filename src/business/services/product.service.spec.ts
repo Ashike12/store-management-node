@@ -201,6 +201,20 @@ describe('ProductService with isolated persistence', () => {
     expect(response).toContain('EndUserDiscountedPrice');
     expect(response).toContain('AverageRating');
     expect(response).toContain('ReviewCount');
+    expect(response).toContain('"SellingPrice":180');
+    const wholesaler = JSON.stringify(
+      await service.getClientProduct(
+        { size: '10' },
+        {} as any,
+        { Roles: ['wholesaler'] } as any,
+      ),
+    );
+    expect(wholesaler).toContain('"SellingPrice":150');
+    expect(wholesaler).toContain('"PriceType":"wholesale"');
+    expect(wholesaler).not.toContain('WholeSalerPrice');
+    expect(wholesaler).not.toContain('EndUserPrice');
+    expect(wholesaler).not.toContain('EndUserDiscountedPrice');
+    expect(wholesaler).not.toContain('MakingPrice');
     const admin = JSON.stringify(
       await service.getProduct({ size: '10' }, {} as any),
     );

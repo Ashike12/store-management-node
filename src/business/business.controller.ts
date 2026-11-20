@@ -18,6 +18,7 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
 import { QueryRespone } from '../shared/response/query.response';
 import { Query as ExpressQuery } from 'express-serve-static-core';
 import { CommandResponse } from '../shared/response/command.response';
@@ -157,12 +158,17 @@ export class BusinessController {
 
   @Post('GetClientProducts')
   @HttpCode(200)
-  @UseGuards(RateLimitGuard())
+  @UseGuards(RateLimitGuard(), OptionalJwtGuard)
   GetClientProducts(
     @Query() query: ExpressQuery,
     @Body() dto: GetProductDto,
+    @Req() req: Request,
   ): Promise<QueryRespone> {
-    return this.productService.getClientProduct(query, dto);
+    return this.productService.getClientProduct(
+      query,
+      dto,
+      req['user'] as User | undefined,
+    );
   }
 
   @Post('VerifyProductQr')

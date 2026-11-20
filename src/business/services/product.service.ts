@@ -260,13 +260,19 @@ export class ProductService {
   async getClientProduct(
     query: Query,
     dto: GetProductDto,
+    user?: User,
   ): Promise<QueryRespone> {
     const response = new QueryRespone();
     const { datas, dataCount } = await this.queryProducts(query, dto);
 
     const responseCompanies = [];
     datas.forEach((x) => {
-      responseCompanies.push(this.mapClientProductResponse(x));
+      responseCompanies.push(
+        this.mapClientProductResponse(
+          x,
+          user?.Roles?.includes(UserRoles.WholeSaler) ?? false,
+        ),
+      );
     });
     response.setData(responseCompanies, dataCount);
     return response;
@@ -404,9 +410,9 @@ export class ProductService {
     };
   }
 
-  private mapClientProductResponse(x: Product): any {
+  private mapClientProductResponse(x: Product, isWholesaler = false): any {
     const imageLinks = this.getImageLinks(x);
-    return {
+    const base = {
       ItemId: x._id,
       ProductName: x.ProductName,
       Category: (x as any).Category ?? '',
@@ -416,13 +422,31 @@ export class ProductService {
       Description: x.Description,
       ImageLinks: imageLinks,
       VideoLink: x.VideoLink ?? '',
-      EndUserPrice: (x as any).EndUserPrice ?? (x as any).SellingPrice ?? 0,
-      EndUserDiscountedPrice:
-        (x as any).EndUserDiscountedPrice ?? (x as any).SellingPrice ?? 0,
       Quantity: x.Quantity,
       AverageRating: (x as any).AverageRating ?? 0,
       ReviewCount: (x as any).ReviewCount ?? 0,
       CreatedDate: x.CreatedDate,
+    };
+
+    if (isWholesaler) {
+      return {
+        ...base,
+        SellingPrice: (x as any).WholeSalerPrice ?? 0,
+        PriceType: 'wholesale',
+      };
+    }
+
+    return {
+      ...base,
+      EndUserPrice: (x as any).EndUserPrice ?? (x as any).SellingPrice ?? 0,
+      EndUserDiscountedPrice:
+        (x as any).EndUserDiscountedPrice ?? (x as any).SellingPrice ?? 0,
+      SellingPrice:
+        (x as any).EndUserDiscountedPrice ??
+        (x as any).EndUserPrice ??
+        (x as any).SellingPrice ??
+        0,
+      PriceType: 'consumer',
     };
   }
 

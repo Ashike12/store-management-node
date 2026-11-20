@@ -28,6 +28,7 @@ import {
 } from '../shared/schemas/product-review.schema';
 import { ProductReviewService } from './services/product-review.service';
 import { ProductReviewRateLimitGuard } from '../guards/product-review-rate-limit.guard';
+import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { ProductReviewRateLimitGuard } from '../guards/product-review-rate-limit
     InventoryService,
     ProductReviewService,
     ProductReviewRateLimitGuard,
+    OptionalJwtGuard,
   ],
 })
 export class BusinessModule {}

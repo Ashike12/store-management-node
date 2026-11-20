@@ -26,6 +26,7 @@
     "seed:inventory": "node scripts/seed-inventory-batches.cjs",
     "seed:product-qr": "node scripts/seed-product-qr.cjs",
     "seed:product-reviews": "node scripts/seed-product-reviews.cjs",
+    "seed:client-products-access": "node scripts/seed-client-products-access.cjs",
     "seed:employees": "node scripts/seed-employees.cjs",
     "seed:google-auth": "node scripts/seed-google-auth.cjs",
     "seed:sales-tracking": "node scripts/seed-sales-tracking.cjs"
