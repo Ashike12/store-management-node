@@ -19,6 +19,9 @@ describe('ProductService with isolated persistence', () => {
     createBatch: jest.fn(),
     findRequestBatches: jest.fn(),
     hasBatches: jest.fn(),
+    findBatch: jest.fn(),
+    findProductIdByItemQrToken: jest.fn(),
+    listBatchQrTokens: jest.fn(),
   };
   const query = { limit: jest.fn(), skip: jest.fn() };
   const product = {
@@ -55,6 +58,9 @@ describe('ProductService with isolated persistence', () => {
     inventory.createBatch.mockReset().mockResolvedValue({ BatchId: 'batch-1' });
     inventory.findRequestBatches.mockReset().mockResolvedValue([]);
     inventory.hasBatches.mockReset().mockResolvedValue(false);
+    inventory.findBatch.mockReset().mockResolvedValue(null);
+    inventory.findProductIdByItemQrToken.mockReset().mockResolvedValue(null);
+    inventory.listBatchQrTokens.mockReset();
     query.limit.mockReset().mockReturnValue(query);
     query.skip.mockReset().mockResolvedValue([product]);
     service = new ProductService(
@@ -284,6 +290,62 @@ describe('ProductService with isolated persistence', () => {
 
     if (originalClientUrl === undefined) delete process.env.PUBLIC_CLIENT_URL;
     else process.env.PUBLIC_CLIENT_URL = originalClientUrl;
+  });
+  describe('per-unit batch QR codes', () => {
+    const original = process.env.PUBLIC_CLIENT_URL;
+    beforeEach(() => {
+      process.env.PUBLIC_CLIENT_URL = 'https://shop.example.com/';
+    });
+    afterEach(() => {
+      if (original === undefined) delete process.env.PUBLIC_CLIENT_URL;
+      else process.env.PUBLIC_CLIENT_URL = original;
+    });
+    const dto = { BatchId: 'batch-1', Page: 1, Size: 200 } as any;
+
+    it('lists one verify URL per unit and never returns serials', async () => {
+      inventory.findBatch.mockResolvedValue({ BatchId: 'batch-1', ProductId: 'product-1' });
+      model.findOne.mockResolvedValue({ ...product, QrVerificationEnabled: true });
+      inventory.listBatchQrTokens.mockResolvedValue({
+        Data: [{ UnitIndex: 1, Token: 'tok-a' }, { UnitIndex: 2, Token: 'tok-b' }],
+        TotalCount: 2,
+      });
+      const res: any = await service.listBatchQrCodes(dto, admin);
+      expect(res).toEqual({
+        IsSuccess: true,
+        Data: [
+          { UnitIndex: 1, QrVerificationUrl: 'https://shop.example.com/verify-product/tok-a' },
+          { UnitIndex: 2, QrVerificationUrl: 'https://shop.example.com/verify-product/tok-b' },
+        ],
+        TotalCount: 2,
+      });
+      expect(JSON.stringify(res)).not.toContain('Serial');
+    });
+    it('rejects non-admins, unknown batches, and products without QR enabled', async () => {
+      await expect(service.listBatchQrCodes(dto, { Roles: ['wholesaler'] } as any)).rejects.toThrow('Admin access required');
+      await expect(service.listBatchQrCodes(dto, admin)).rejects.toThrow('Batch not found');
+      inventory.findBatch.mockResolvedValue({ BatchId: 'batch-1', ProductId: 'product-1' });
+      model.findOne.mockResolvedValue({ ...product, QrVerificationEnabled: false });
+      await expect(service.listBatchQrCodes(dto, admin)).rejects.toThrow('Enable QR verification');
+      expect(inventory.listBatchQrTokens).not.toHaveBeenCalled();
+    });
+    it('rejects when the public client URL is not configured', async () => {
+      delete process.env.PUBLIC_CLIENT_URL;
+      inventory.findBatch.mockResolvedValue({ BatchId: 'batch-1', ProductId: 'product-1' });
+      model.findOne.mockResolvedValue({ ...product, QrVerificationEnabled: true });
+      await expect(service.listBatchQrCodes(dto, admin)).rejects.toThrow('PUBLIC_CLIENT_URL');
+    });
+    it('verifies a unit code as its product, only while the product QR is enabled', async () => {
+      inventory.findProductIdByItemQrToken.mockResolvedValue('product-1');
+      model.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ ...product, QrVerificationEnabled: true });
+      const ok = await service.verifyProductQr('unit-token');
+      expect(model.findOne).toHaveBeenLastCalledWith({ _id: 'product-1', QrVerificationEnabled: true });
+      expect(ok.Data).toEqual({ ProductName: 'Net', ImageUrl: 'https://example.com/net.jpg' });
+
+      model.findOne.mockReset().mockResolvedValue(null);
+      await expect(service.verifyProductQr('unit-token')).rejects.toThrow('not found');
+    });
   });
   it('returns only public product identity for an enabled QR code', async () => {
     model.findOne.mockResolvedValue({

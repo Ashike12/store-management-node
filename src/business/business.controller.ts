@@ -44,6 +44,7 @@ import { AiSuggestionService } from './services/ai-suggestion.service';
 import { QuoteBuilderDto } from './dto/client-order/quote-builder.dto';
 import {
   ListBatchItemsDto,
+  ListBatchQrCodesDto,
   ListProductBatchesDto,
 } from './dto/product/inventory.dto';
 import { InventoryService } from './services/inventory.service';
@@ -430,6 +431,21 @@ export class BusinessController {
   ListProductBatches(@Body() dto: ListProductBatchesDto, @Req() req: Request) {
     this.ensureAdmin(req['user'] as User);
     return this.inventoryService.listBatches(dto, req['user'] as User);
+  }
+
+  @Post('ListBatchQrCodes')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
+  ListBatchQrCodes(@Body() dto: ListBatchQrCodesDto, @Req() req: Request) {
+    this.ensureAdmin(req['user'] as User);
+    return this.productService.listBatchQrCodes(dto, req['user'] as User);
   }
 
   @Post('ListBatchItems')
