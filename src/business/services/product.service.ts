@@ -426,6 +426,12 @@ export class ProductService {
       AverageRating: (x as any).AverageRating ?? 0,
       ReviewCount: (x as any).ReviewCount ?? 0,
       CreatedDate: x.CreatedDate,
+      // Public on purpose: the storefront cart renders this URL as a QR code.
+      // It only resolves to product name/image (see VerifyProductQr).
+      QrVerificationUrl:
+        (x as any).QrVerificationEnabled && (x as any).QrVerificationToken
+          ? this.buildQrVerificationUrl((x as any).QrVerificationToken)
+          : null,
     };
 
     if (isWholesaler) {

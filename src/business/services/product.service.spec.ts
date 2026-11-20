@@ -183,6 +183,28 @@ describe('ProductService with isolated persistence', () => {
     } as any);
     expect(model.find).toHaveBeenCalledWith({});
   });
+  it('exposes the QR verify URL publicly only for QR-enabled products', async () => {
+    const original = process.env.PUBLIC_CLIENT_URL;
+    process.env.PUBLIC_CLIENT_URL = 'https://shop.example.com/';
+    try {
+      query.skip.mockResolvedValueOnce([
+        { ...product, QrVerificationEnabled: true, QrVerificationToken: 'tok-1' },
+        { ...product, QrVerificationEnabled: false, QrVerificationToken: 'tok-2' },
+        { ...product },
+      ]);
+      const res: any = await service.getClientProduct({ size: '10' }, {} as any);
+      const urls = (res.Data ?? res.datas ?? res).map?.((p: any) => p.QrVerificationUrl);
+      expect(urls).toEqual([
+        'https://shop.example.com/verify-product/tok-1',
+        null,
+        null,
+      ]);
+      expect(JSON.stringify(res)).not.toContain('tok-2');
+    } finally {
+      if (original === undefined) delete process.env.PUBLIC_CLIENT_URL;
+      else process.env.PUBLIC_CLIENT_URL = original;
+    }
+  });
   it('keeps wholesale and making prices out of the public response', async () => {
     query.skip.mockResolvedValueOnce([
       {
@@ -196,8 +218,8 @@ describe('ProductService with isolated persistence', () => {
     );
     expect(response).not.toContain('WholeSalerPrice');
     expect(response).not.toContain('MakingPrice');
-    expect(response).not.toContain('private-opaque-token');
-    expect(response).not.toContain('QrVerification');
+    expect(response).not.toContain('QrVerificationToken');
+    expect(response).not.toContain('QrVerificationEnabled');
     expect(response).toContain('EndUserDiscountedPrice');
     expect(response).toContain('AverageRating');
     expect(response).toContain('ReviewCount');

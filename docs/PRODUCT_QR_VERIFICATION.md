@@ -26,3 +26,8 @@ The seed creates the unique token index and writes `ConfigureProductQr` and `Ver
 - Rotating creates a new token and immediately invalidates the previous label.
 - Disabling makes the current label return `404`; re-enabling restores that same label unless it is rotated.
 - Existing products are disabled by default.
+
+## Public catalog exposure (cart QR)
+
+`GetClientProducts` returns `QrVerificationUrl` (`<PUBLIC_CLIENT_URL>/verify-product/<token>`) for products with QR verification enabled, and `null` otherwise. The storefront cart renders it as a scannable QR code. This is a deliberate owner decision: the URL resolves only to product name and image, but anyone browsing the shop can now read an enabled product's token. Rotating a product's code (`ConfigureProductQr` action `rotate`) invalidates the old one. `QrVerificationToken` and `QrVerificationEnabled` are still never returned on their own, and inventory serials are never involved.
+
