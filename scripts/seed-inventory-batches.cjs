@@ -1,4 +1,4 @@
-const endpoints = ['ListProductBatches', 'ListBatchItems'];
+const endpoints = ['ListProductBatches', 'ListBatchItems', 'ListBatchQrCodes'];
 
 async function seedInventoryBatches(db) {
   for (const FeatureId of endpoints) {
@@ -39,6 +39,13 @@ async function seedInventoryBatches(db) {
   await db
     .collection('inventoryitems')
     .createIndex({ BatchId: 1, UnitIndex: 1 }, { unique: true });
+  await db.collection('inventoryitems').createIndex(
+    { QrToken: 1 },
+    {
+      unique: true,
+      partialFilterExpression: { QrToken: { $type: 'string' } },
+    },
+  );
 }
 
 module.exports = { seedInventoryBatches, endpoints };

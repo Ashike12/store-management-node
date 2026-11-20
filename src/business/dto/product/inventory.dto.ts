@@ -34,3 +34,20 @@ export class ListBatchItemsDto {
   @Max(100)
   Size = 25;
 }
+
+export class ListBatchQrCodesDto {
+  @IsString()
+  @IsNotEmpty()
+  BatchId: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  Page = 1;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  Size = 200;
+}
