@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -27,6 +28,7 @@ import { GetInvoiceDto } from '../dto/product-sell/get-invoice.dto';
 import { AddProductionDto } from '../dto/product/add-production.dto';
 import { PRODUCT_CATEGORY_SUBCATEGORY_MAP } from '../../shared/constant/product.constant';
 import { InventoryService } from './inventory.service';
+import { ListBatchQrCodesDto } from '../dto/product/inventory.dto';
 import { createHash, randomBytes } from 'crypto';
 import { ConfigureProductQrDto } from '../dto/product/product-qr.dto';
 
@@ -260,13 +262,19 @@ export class ProductService {
   async getClientProduct(
     query: Query,
     dto: GetProductDto,
+    user?: User,
   ): Promise<QueryRespone> {
     const response = new QueryRespone();
     const { datas, dataCount } = await this.queryProducts(query, dto);
 
     const responseCompanies = [];
     datas.forEach((x) => {
-      responseCompanies.push(this.mapClientProductResponse(x));
+      responseCompanies.push(
+        this.mapClientProductResponse(
+          x,
+          user?.Roles?.includes(UserRoles.WholeSaler) ?? false,
+        ),
+      );
     });
     response.setData(responseCompanies, dataCount);
     return response;
@@ -306,11 +314,51 @@ export class ProductService {
     return response;
   }
 
+  /** Admin only: per-unit QR links for one page of a batch (no serials). */
+  async listBatchQrCodes(dto: ListBatchQrCodesDto, user: User) {
+    if (!user?.Roles?.includes(UserRoles.Admin)) {
+      throw new ForbiddenException('Admin access required');
+    }
+    const batch: any = await this.inventoryService.findBatch(dto.BatchId);
+    if (!batch) throw new NotFoundException('Batch not found');
+    const product = await this.productModel.findOne({ _id: batch.ProductId });
+    if (!product || !(product as any).QrVerificationEnabled) {
+      throw new BadRequestException(
+        'Enable QR verification for this product before downloading batch QR codes',
+      );
+    }
+    if (!this.buildQrVerificationUrl('x')) {
+      throw new BadRequestException('PUBLIC_CLIENT_URL is not configured');
+    }
+    const { Data, TotalCount } = await this.inventoryService.listBatchQrTokens(
+      dto,
+      user,
+    );
+    return {
+      IsSuccess: true,
+      Data: Data.map((row) => ({
+        UnitIndex: row.UnitIndex,
+        QrVerificationUrl: this.buildQrVerificationUrl(row.Token),
+      })),
+      TotalCount,
+    };
+  }
+
   async verifyProductQr(token: string): Promise<CommandResponse> {
-    const product = await this.productModel.findOne({
+    let product = await this.productModel.findOne({
       QrVerificationToken: token,
       QrVerificationEnabled: true,
     });
+    if (!product) {
+      // Not a product-level code: it may be a single-unit code from a batch.
+      const productId = await this.inventoryService.findProductIdByItemQrToken(token);
+      if (productId) {
+        product = await this.productModel.findOne({
+          _id: productId,
+          QrVerificationEnabled: true,
+        });
+      }
+    }
     if (!product) {
       throw new NotFoundException('Product verification code not found');
     }
@@ -404,9 +452,9 @@ export class ProductService {
     };
   }
 
-  private mapClientProductResponse(x: Product): any {
+  private mapClientProductResponse(x: Product, isWholesaler = false): any {
     const imageLinks = this.getImageLinks(x);
-    return {
+    const base = {
       ItemId: x._id,
       ProductName: x.ProductName,
       Category: (x as any).Category ?? '',
@@ -416,13 +464,37 @@ export class ProductService {
       Description: x.Description,
       ImageLinks: imageLinks,
       VideoLink: x.VideoLink ?? '',
-      EndUserPrice: (x as any).EndUserPrice ?? (x as any).SellingPrice ?? 0,
-      EndUserDiscountedPrice:
-        (x as any).EndUserDiscountedPrice ?? (x as any).SellingPrice ?? 0,
       Quantity: x.Quantity,
       AverageRating: (x as any).AverageRating ?? 0,
       ReviewCount: (x as any).ReviewCount ?? 0,
       CreatedDate: x.CreatedDate,
+      // Public on purpose: the storefront cart renders this URL as a QR code.
+      // It only resolves to product name/image (see VerifyProductQr).
+      QrVerificationUrl:
+        (x as any).QrVerificationEnabled && (x as any).QrVerificationToken
+          ? this.buildQrVerificationUrl((x as any).QrVerificationToken)
+          : null,
+    };
+
+    if (isWholesaler) {
+      return {
+        ...base,
+        SellingPrice: (x as any).WholeSalerPrice ?? 0,
+        PriceType: 'wholesale',
+      };
+    }
+
+    return {
+      ...base,
+      EndUserPrice: (x as any).EndUserPrice ?? (x as any).SellingPrice ?? 0,
+      EndUserDiscountedPrice:
+        (x as any).EndUserDiscountedPrice ?? (x as any).SellingPrice ?? 0,
+      SellingPrice:
+        (x as any).EndUserDiscountedPrice ??
+        (x as any).EndUserPrice ??
+        (x as any).SellingPrice ??
+        0,
+      PriceType: 'consumer',
     };
   }
 

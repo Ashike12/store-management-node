@@ -555,6 +555,15 @@ const cases: Case[] = [
   },
   {
     method: 'post',
+    path: '/business/ListBatchQrCodes',
+    service: ProductService,
+    call: 'listBatchQrCodes',
+    body: { BatchId: 'batch-id', Page: 1, Size: 200 },
+    invalid: { BatchId: '', Page: 0, Size: 501 },
+    restricted: true,
+  },
+  {
+    method: 'post',
     path: '/business/GenerateAiSuggestion',
     service: AiSuggestionService,
     call: 'generateSuggestion',

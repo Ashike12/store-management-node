@@ -18,6 +18,7 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
 import { QueryRespone } from '../shared/response/query.response';
 import { Query as ExpressQuery } from 'express-serve-static-core';
 import { CommandResponse } from '../shared/response/command.response';
@@ -43,6 +44,7 @@ import { AiSuggestionService } from './services/ai-suggestion.service';
 import { QuoteBuilderDto } from './dto/client-order/quote-builder.dto';
 import {
   ListBatchItemsDto,
+  ListBatchQrCodesDto,
   ListProductBatchesDto,
 } from './dto/product/inventory.dto';
 import { InventoryService } from './services/inventory.service';
@@ -157,12 +159,17 @@ export class BusinessController {
 
   @Post('GetClientProducts')
   @HttpCode(200)
-  @UseGuards(RateLimitGuard())
+  @UseGuards(RateLimitGuard(), OptionalJwtGuard)
   GetClientProducts(
     @Query() query: ExpressQuery,
     @Body() dto: GetProductDto,
+    @Req() req: Request,
   ): Promise<QueryRespone> {
-    return this.productService.getClientProduct(query, dto);
+    return this.productService.getClientProduct(
+      query,
+      dto,
+      req['user'] as User | undefined,
+    );
   }
 
   @Post('VerifyProductQr')
@@ -424,6 +431,21 @@ export class BusinessController {
   ListProductBatches(@Body() dto: ListProductBatchesDto, @Req() req: Request) {
     this.ensureAdmin(req['user'] as User);
     return this.inventoryService.listBatches(dto, req['user'] as User);
+  }
+
+  @Post('ListBatchQrCodes')
+  @HttpCode(200)
+  @UseGuards(AuthGuard())
+  @UsePipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  )
+  ListBatchQrCodes(@Body() dto: ListBatchQrCodesDto, @Req() req: Request) {
+    this.ensureAdmin(req['user'] as User);
+    return this.productService.listBatchQrCodes(dto, req['user'] as User);
   }
 
   @Post('ListBatchItems')

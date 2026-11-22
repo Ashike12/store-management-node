@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import { ClientSession, Model } from 'mongoose';
 import { UserRoles } from '../../shared/constant/roles.constant';
 import { InventoryBatch } from '../../shared/schemas/inventory-batch.schema';
@@ -8,8 +8,11 @@ import { InventoryItem } from '../../shared/schemas/inventory-item.schema';
 import { User } from '../../shared/schemas/user.schema';
 import {
   ListBatchItemsDto,
+  ListBatchQrCodesDto,
   ListProductBatchesDto,
 } from '../dto/product/inventory.dto';
+
+const newQrToken = () => randomBytes(24).toString('base64url');
 
 @Injectable()
 export class InventoryService {
@@ -74,6 +77,7 @@ export class InventoryService {
         BatchId,
         ProductId,
         UnitIndex: index + 1,
+        QrToken: newQrToken(),
         CreatedDate,
         RolesAllowedToRead: [UserRoles.Admin],
       };
@@ -141,6 +145,59 @@ export class InventoryService {
     return {
       IsSuccess: true,
       Data,
+      TotalCount: await this.items.countDocuments(filter),
+    };
+  }
+
+  findBatch(BatchId: string) {
+    return this.batches.findOne({ BatchId }).select('BatchId ProductId').lean();
+  }
+
+  /** Public lookup: resolves an item QR token to its catalog product id only. */
+  async findProductIdByItemQrToken(token: string): Promise<string | null> {
+    const item = await this.items
+      .findOne({ QrToken: token })
+      .select('ProductId')
+      .lean();
+    return item ? String((item as any).ProductId) : null;
+  }
+
+  /**
+   * Admin only. One page of per-unit QR tokens for a batch. Units created
+   * before QR tokens existed are given one here (conditional, race-safe).
+   * Serial numbers are never returned.
+   */
+  async listBatchQrTokens(dto: ListBatchQrCodesDto, user: User) {
+    this.ensureAdmin(user);
+    const filter = { BatchId: dto.BatchId };
+    const find = () =>
+      this.items
+        .find(filter)
+        .select('_id UnitIndex QrToken')
+        .sort({ UnitIndex: 1 })
+        .skip((dto.Page - 1) * dto.Size)
+        .limit(dto.Size)
+        .lean();
+
+    let rows: any[] = await find();
+    const missing = rows.filter((row) => !row.QrToken);
+    if (missing.length) {
+      await this.items.bulkWrite(
+        missing.map((row) => ({
+          updateOne: {
+            filter: { _id: row._id, QrToken: { $exists: false } },
+            update: { $set: { QrToken: newQrToken() } },
+          },
+        })),
+        { ordered: false },
+      );
+      rows = await find();
+    }
+    return {
+      Data: rows.map((row) => ({
+        UnitIndex: row.UnitIndex as number,
+        Token: row.QrToken as string,
+      })),
       TotalCount: await this.items.countDocuments(filter),
     };
   }
